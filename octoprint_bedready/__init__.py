@@ -162,10 +162,14 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             match_percentage = self._settings.get_float(["match_percentage"])
 
         self._logger.info(f"check_bed with reference {reference} (threshold {match_percentage})")
-        self.take_snapshot(COMPARISON_FILENAME)
-        similarity = self.compare_images(
-            os.path.join(self.get_plugin_data_folder(), reference),
-            os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME))
+        try: 
+            self.take_snapshot(COMPARISON_FILENAME)
+            similarity = self.compare_images(
+                os.path.join(self.get_plugin_data_folder(), reference),
+                os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME))
+        except Exception as e:
+            self._logger.exception("Error during snapshot comparison:")
+
         return {"bed_clear": similarity > match_percentage, "test_image": COMPARISON_FILENAME, "reference_image": reference, "similarity": round(similarity, 4)}
 
     # ~~ Softwareupdate hook
