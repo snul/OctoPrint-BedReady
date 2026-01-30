@@ -23,6 +23,17 @@ $(function () {
 
         self.settingsViewModel = parameters[0];
         self.controlViewModel = parameters[1];
+        
+        // Crop editor variables
+        self.canvas = null;
+        self.ctx = null;
+        self.img = null;
+        self.isDragging = false;
+        self.dragStartX = 0;
+        self.dragStartY = 0;
+        self.scale = 1;
+        self.imageWidth = 0;
+        self.imageHeight = 0;
 
         self.snapshot_valid = ko.pureComputed(function(){
             return self.settingsViewModel.webcam_snapshotUrl().length > 0 && self.settingsViewModel.webcam_snapshotUrl().startsWith('http');
@@ -120,6 +131,138 @@ $(function () {
             });
         }
         self.load_snapshots();
+
+        // Crop editor functions
+        self.imageLoaded = function() {
+            self.img = document.getElementById('bedready-reference-image');
+            self.canvas = document.getElementById('bedready-crop-canvas');
+            if (!self.canvas || !self.img) return;
+            
+            self.ctx = self.canvas.getContext('2d');
+            
+            // Get actual image dimensions
+            OctoPrint.simpleApiCommand('bedready', 'get_image_dimensions', {
+                filename: self.settingsViewModel.settings.plugins.bedready.reference_image()
+            }).done(function(response) {
+                self.imageWidth = response.width;
+                self.imageHeight = response.height;
+                
+                // Initialize crop coordinates if not set
+                if (self.settingsViewModel.settings.plugins.bedready.crop_x2() === 0 ||
+                    self.settingsViewModel.settings.plugins.bedready.crop_y2() === 0) {
+                    self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y1(0);
+                    self.settingsViewModel.settings.plugins.bedready.crop_x2(self.imageWidth);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y2(self.imageHeight);
+                }
+                
+                self.drawCanvas();
+            });
+        };
+        
+        self.drawCanvas = function() {
+            if (!self.canvas || !self.img || !self.ctx) return;
+            
+            // Set canvas size to fit container (max 800px wide)
+            const maxWidth = 800;
+            self.scale = Math.min(1, maxWidth / self.imageWidth);
+            self.canvas.width = self.imageWidth * self.scale;
+            self.canvas.height = self.imageHeight * self.scale;
+            
+            // Draw image
+            self.ctx.drawImage(self.img, 0, 0, self.canvas.width, self.canvas.height);
+            
+            // Draw crop rectangle
+            const x1 = self.settingsViewModel.settings.plugins.bedready.crop_x1() * self.scale;
+            const y1 = self.settingsViewModel.settings.plugins.bedready.crop_y1() * self.scale;
+            const x2 = self.settingsViewModel.settings.plugins.bedready.crop_x2() * self.scale;
+            const y2 = self.settingsViewModel.settings.plugins.bedready.crop_y2() * self.scale;
+            
+            // Dim area outside crop
+            self.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            self.ctx.fillRect(0, 0, self.canvas.width, y1);
+            self.ctx.fillRect(0, y2, self.canvas.width, self.canvas.height - y2);
+            self.ctx.fillRect(0, y1, x1, y2 - y1);
+            self.ctx.fillRect(x2, y1, self.canvas.width - x2, y2 - y1);
+            
+            // Draw rectangle border
+            self.ctx.strokeStyle = '#00ff00';
+            self.ctx.lineWidth = 2;
+            self.ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            
+            // Draw corner handles
+            const handleSize = 8;
+            self.ctx.fillStyle = '#00ff00';
+            self.ctx.fillRect(x1 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
+            self.ctx.fillRect(x2 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
+            self.ctx.fillRect(x1 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
+            self.ctx.fillRect(x2 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
+        };
+        
+        self.startCrop = function(data, event) {
+            const rect = self.canvas.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / self.scale;
+            const y = (event.clientY - rect.top) / self.scale;
+            
+            self.isDragging = true;
+            self.dragStartX = x;
+            self.dragStartY = y;
+            return false;
+        };
+        
+        self.moveCrop = function(data, event) {
+            if (!self.isDragging) return;
+            
+            const rect = self.canvas.getBoundingClientRect();
+            const x = Math.max(0, Math.min(self.imageWidth, (event.clientX - rect.left) / self.scale));
+            const y = Math.max(0, Math.min(self.imageHeight, (event.clientY - rect.top) / self.scale));
+            
+            const x1 = Math.min(self.dragStartX, x);
+            const y1 = Math.min(self.dragStartY, y);
+            const x2 = Math.max(self.dragStartX, x);
+            const y2 = Math.max(self.dragStartY, y);
+            
+            self.settingsViewModel.settings.plugins.bedready.crop_x1(Math.round(x1));
+            self.settingsViewModel.settings.plugins.bedready.crop_y1(Math.round(y1));
+            self.settingsViewModel.settings.plugins.bedready.crop_x2(Math.round(x2));
+            self.settingsViewModel.settings.plugins.bedready.crop_y2(Math.round(y2));
+            
+            self.drawCanvas();
+            return false;
+        };
+        
+        self.endCrop = function(data, event) {
+            self.isDragging = false;
+            return false;
+        };
+        
+        self.cancelCrop = function(data, event) {
+            self.isDragging = false;
+            return false;
+        };
+        
+        self.updateCropFromInputs = function() {
+            // Validate and constrain values
+            const x1 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0));
+            const y1 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1()) || 0));
+            const x2 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || self.imageWidth));
+            const y2 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || self.imageHeight));
+            
+            self.settingsViewModel.settings.plugins.bedready.crop_x1(x1);
+            self.settingsViewModel.settings.plugins.bedready.crop_y1(y1);
+            self.settingsViewModel.settings.plugins.bedready.crop_x2(x2);
+            self.settingsViewModel.settings.plugins.bedready.crop_y2(y2);
+            
+            self.drawCanvas();
+        };
+        
+        self.resetCrop = function() {
+            self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
+            self.settingsViewModel.settings.plugins.bedready.crop_y1(0);
+            self.settingsViewModel.settings.plugins.bedready.crop_x2(self.imageWidth);
+            self.settingsViewModel.settings.plugins.bedready.crop_y2(self.imageHeight);
+            self.drawCanvas();
+        };
 
         self.test_snapshot = function () {
             self.taking_snapshot(true);

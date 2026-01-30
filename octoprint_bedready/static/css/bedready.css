@@ -3,3 +3,20 @@ div.ui-pnotify.bedready_notice > div.ui-pnotify-container > div.ui-pnotify-icon 
 {
     padding-top: 3px;
 }
+
+.bedready-crop-container {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 10px;
+}
+
+#bedready-crop-canvas {
+    border: 2px solid #ccc;
+    cursor: crosshair;
+    display: block;
+    max-width: 100%;
+}
+
+#bedready-crop-canvas:hover {
+    border-color: #00ff00;
+}

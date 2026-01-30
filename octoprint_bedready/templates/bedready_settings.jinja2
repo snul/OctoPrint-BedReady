@@ -8,11 +8,34 @@
   <h3>{{ _('Reference Image') }}</h3>
   <div class="control-group">
     <div class="controls">
+      <div class="bedready-crop-container" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
+        <canvas id="bedready-crop-canvas" data-bind="event: {mousedown: startCrop, mousemove: moveCrop, mouseup: endCrop, mouseleave: cancelCrop}"></canvas>
+        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + settingsViewModel.settings.plugins.bedready.reference_image()}, event: {load: imageLoaded}" style="display:none;">
+      </div>
       <p>
-        <img src="" alt="bed snapshot" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, attr: {src: 'plugin/bedready/images/' + settingsViewModel.settings.plugins.bedready.reference_image()}">
+        <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button> 
+        <button class="btn btn-primary" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, click: test_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Test Reference') }}</button>
+        <button class="btn" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, click: resetCrop">{{ _('Reset Crop Area') }}</button>
       </p>
-      <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button> 
-      <button class="btn btn-primary" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, click: test_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Test Reference') }}</button>
+    </div>
+  </div>
+  <div class="control-group" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
+    <label class="control-label">{{ _('Crop Coordinates') }}</label>
+    <div class="controls">
+      <div class="row-fluid">
+        <div class="span3">
+          <label>X1: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+        </div>
+        <div class="span3">
+          <label>Y1: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+        </div>
+        <div class="span3">
+          <label>X2: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+        </div>
+        <div class="span3">
+          <label>Y2: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+        </div>
+      </div>
     </div>
   </div>
 	<div class="control-group">

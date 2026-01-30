@@ -36,6 +36,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             check_bed=[],
             list_snapshots=[],
             delete_snapshot=["filename"],
+            get_image_dimensions=["filename"],
         )
 
     def get_snapshots(self):
@@ -68,6 +69,18 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             elif not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
             p.unlink()
+        elif command == "get_image_dimensions":
+            try:
+                import cv2
+                filename = data.get("filename")
+                image_path = os.path.join(self.get_plugin_data_folder(), filename)
+                img = cv2.imread(image_path)
+                if img is None:
+                    return flask.jsonify(dict(error="Unable to read image"))
+                height, width = img.shape[:2]
+                return flask.jsonify(dict(width=width, height=height))
+            except Exception as e:
+                return flask.jsonify(dict(error=str(e)))
 
     def take_snapshot(self, filename=None):
         snapshot_url = self._settings.global_get(["webcam", "snapshot"])
@@ -92,7 +105,11 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         return {
             "reference_image": "",
             "match_percentage": 0.98,
-            "cancel_print": False
+            "cancel_print": False,
+            "crop_x1": 0,
+            "crop_y1": 0,
+            "crop_x2": 0,
+            "crop_y2": 0
         }
 
     # ~~ AssetPlugin mixin
@@ -124,6 +141,18 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         import cv2
         reference_image = cv2.imread(reference_image)
         comparison_image = cv2.imread(comparison_image)
+        
+        # Get crop coordinates from settings
+        x1 = self._settings.get_int(["crop_x1"])
+        y1 = self._settings.get_int(["crop_y1"])
+        x2 = self._settings.get_int(["crop_x2"])
+        y2 = self._settings.get_int(["crop_y2"])
+        
+        # Crop images if coordinates are set (x2 and y2 > 0)
+        if x2 > 0 and y2 > 0:
+            reference_image = reference_image[y1:y2, x1:x2]
+            comparison_image = comparison_image[y1:y2, x1:x2]
+        
         height, width, channels = reference_image.shape
         pixel_difference = cv2.norm(reference_image, comparison_image, cv2.NORM_L2)
         return 1 - pixel_difference / (height * width)
