@@ -253,11 +253,14 @@ $(function () {
         
         self.findCornerAtPosition = function(x, y) {
             const corners = self.getCorners();
-            const threshold = (self.handleSize * 1.5) / self.scale; // Larger hit area
+            const threshold = self.handleSize * 1.5; // Threshold in canvas pixels, not image pixels
             
             for (let i = 0; i < corners.length; i++) {
-                const dx = corners[i].x - x;
-                const dy = corners[i].y - y;
+                // Convert corner position to canvas coordinates
+                const cornerX = corners[i].x * self.scale;
+                const cornerY = corners[i].y * self.scale;
+                const dx = cornerX - x;
+                const dy = cornerY - y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance < threshold) {
                     return i;
@@ -270,10 +273,10 @@ $(function () {
             if (!self.canvas) return true;
             
             const rect = self.canvas.getBoundingClientRect();
-            const x = (event.clientX - rect.left) / self.scale;
-            const y = (event.clientY - rect.top) / self.scale;
+            const canvasX = event.clientX - rect.left;
+            const canvasY = event.clientY - rect.top;
             
-            self.draggedCorner = self.findCornerAtPosition(x, y);
+            self.draggedCorner = self.findCornerAtPosition(canvasX, canvasY);
             if (self.draggedCorner !== null) {
                 self.isDragging = true;
                 event.preventDefault();
@@ -283,39 +286,44 @@ $(function () {
         };
         
         self.moveCrop = function(data, event) {
-            if (!self.isDragging || self.draggedCorner === null || !self.canvas) {
+            if (!self.canvas) return true;
+            
+            const rect = self.canvas.getBoundingClientRect();
+            const canvasX = event.clientX - rect.left;
+            const canvasY = event.clientY - rect.top;
+            
+            if (!self.isDragging || self.draggedCorner === null) {
                 // Update cursor style based on hover
-                if (self.canvas) {
-                    const rect = self.canvas.getBoundingClientRect();
-                    const x = (event.clientX - rect.left) / self.scale;
-                    const y = (event.clientY - rect.top) / self.scale;
-                    const hoveredCorner = self.findCornerAtPosition(x, y);
-                    self.canvas.style.cursor = hoveredCorner !== null ? 'move' : 'crosshair';
-                }
+                const hoveredCorner = self.findCornerAtPosition(canvasX, canvasY);
+                self.canvas.style.cursor = hoveredCorner !== null ? 'move' : 'crosshair';
                 return true;
             }
             
-            const rect = self.canvas.getBoundingClientRect();
-            const x = Math.max(0, Math.min(self.imageWidth, (event.clientX - rect.left) / self.scale));
-            const y = Math.max(0, Math.min(self.imageHeight, (event.clientY - rect.top) / self.scale));
+            // Convert canvas coordinates to image coordinates
+            const imageX = canvasX / self.scale;
+            const imageY = canvasY / self.scale;
+            
+            // Clamp to image boundaries
+            const x = Math.max(0, Math.min(self.imageWidth, Math.round(imageX)));
+            const y = Math.max(0, Math.min(self.imageHeight, Math.round(imageY)));
             
             // Update the specific corner being dragged
             switch(self.draggedCorner) {
                 case 0:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x1(Math.round(x));
-                    self.settingsViewModel.settings.plugins.bedready.crop_y1(Math.round(y));
+                    self.settingsViewModel.settings.plugins.bedready.crop_x1(x);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y1(y);
                     break;
                 case 1:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x2(Math.round(x));
-                    self.settingsViewModel.settings.plugins.bedready.crop_y2(Math.round(y));
+                    self.settingsViewModel.settings.plugins.bedready.crop_x2(x);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y2(y);
                     break;
                 case 2:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x3(Math.round(x));
-                    self.settingsViewModel.settings.plugins.bedready.crop_y3(Math.round(y));
+                    self.settingsViewModel.settings.plugins.bedready.crop_x3(x);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y3(y);
                     break;
                 case 3:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x4(Math.round(x));
-                    self.settingsViewModel.settings.plugins.bedready.crop_y4(Math.round(y));
+                    self.settingsViewModel.settings.plugins.bedready.crop_x4(x);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y4(y);
                     break;
             }
             
