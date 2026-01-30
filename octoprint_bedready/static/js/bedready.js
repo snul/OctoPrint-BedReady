@@ -140,6 +140,20 @@ $(function () {
             
             self.ctx = self.canvas.getContext('2d');
             
+            // Add event listeners directly to canvas
+            self.canvas.addEventListener('mousedown', function(e) {
+                self.startCrop(null, e);
+            });
+            self.canvas.addEventListener('mousemove', function(e) {
+                self.moveCrop(null, e);
+            });
+            self.canvas.addEventListener('mouseup', function(e) {
+                self.endCrop(null, e);
+            });
+            self.canvas.addEventListener('mouseleave', function(e) {
+                self.cancelCrop(null, e);
+            });
+            
             // Get actual image dimensions
             OctoPrint.simpleApiCommand('bedready', 'get_image_dimensions', {
                 filename: self.settingsViewModel.settings.plugins.bedready.reference_image()
@@ -239,7 +253,7 @@ $(function () {
         
         self.findCornerAtPosition = function(x, y) {
             const corners = self.getCorners();
-            const threshold = self.handleSize / self.scale;
+            const threshold = (self.handleSize * 1.5) / self.scale; // Larger hit area
             
             for (let i = 0; i < corners.length; i++) {
                 const dx = corners[i].x - x;
@@ -253,6 +267,8 @@ $(function () {
         };
         
         self.startCrop = function(data, event) {
+            if (!self.canvas) return true;
+            
             const rect = self.canvas.getBoundingClientRect();
             const x = (event.clientX - rect.left) / self.scale;
             const y = (event.clientY - rect.top) / self.scale;
@@ -260,12 +276,24 @@ $(function () {
             self.draggedCorner = self.findCornerAtPosition(x, y);
             if (self.draggedCorner !== null) {
                 self.isDragging = true;
+                event.preventDefault();
+                return false;
             }
-            return false;
+            return true;
         };
         
         self.moveCrop = function(data, event) {
-            if (!self.isDragging || self.draggedCorner === null) return;
+            if (!self.isDragging || self.draggedCorner === null || !self.canvas) {
+                // Update cursor style based on hover
+                if (self.canvas) {
+                    const rect = self.canvas.getBoundingClientRect();
+                    const x = (event.clientX - rect.left) / self.scale;
+                    const y = (event.clientY - rect.top) / self.scale;
+                    const hoveredCorner = self.findCornerAtPosition(x, y);
+                    self.canvas.style.cursor = hoveredCorner !== null ? 'move' : 'crosshair';
+                }
+                return true;
+            }
             
             const rect = self.canvas.getBoundingClientRect();
             const x = Math.max(0, Math.min(self.imageWidth, (event.clientX - rect.left) / self.scale));
@@ -292,19 +320,28 @@ $(function () {
             }
             
             self.drawCanvas();
+            event.preventDefault();
             return false;
         };
         
         self.endCrop = function(data, event) {
-            self.isDragging = false;
-            self.draggedCorner = null;
-            return false;
+            if (self.isDragging) {
+                self.isDragging = false;
+                self.draggedCorner = null;
+                event.preventDefault();
+                return false;
+            }
+            return true;
         };
         
         self.cancelCrop = function(data, event) {
-            self.isDragging = false;
-            self.draggedCorner = null;
-            return false;
+            if (self.isDragging) {
+                self.isDragging = false;
+                self.draggedCorner = null;
+                event.preventDefault();
+                return false;
+            }
+            return true;
         };
         
         self.updateCropFromInputs = function() {

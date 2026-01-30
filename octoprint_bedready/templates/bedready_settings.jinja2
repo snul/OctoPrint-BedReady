@@ -9,7 +9,7 @@
   <div class="control-group">
     <div class="controls">
       <div class="bedready-crop-container" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
-        <canvas id="bedready-crop-canvas" data-bind="event: {mousedown: startCrop, mousemove: moveCrop, mouseup: endCrop, mouseleave: cancelCrop}"></canvas>
+        <canvas id="bedready-crop-canvas"></canvas>
         <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + settingsViewModel.settings.plugins.bedready.reference_image()}, event: {load: imageLoaded}" style="display:none;">
       </div>
       <p>
