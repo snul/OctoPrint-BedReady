@@ -277,8 +277,11 @@ $(function () {
             if (!self.canvas) return true;
             
             const rect = self.canvas.getBoundingClientRect();
-            const canvasX = event.clientX - rect.left;
-            const canvasY = event.clientY - rect.top;
+            // Account for any scaling of the canvas element itself
+            const scaleX = self.canvas.width / rect.width;
+            const scaleY = self.canvas.height / rect.height;
+            const canvasX = (event.clientX - rect.left) * scaleX;
+            const canvasY = (event.clientY - rect.top) * scaleY;
             
             self.draggedCorner = self.findCornerAtPosition(canvasX, canvasY);
             if (self.draggedCorner !== null) {
@@ -293,8 +296,11 @@ $(function () {
             if (!self.canvas) return true;
             
             const rect = self.canvas.getBoundingClientRect();
-            const canvasX = event.clientX - rect.left;
-            const canvasY = event.clientY - rect.top;
+            // Account for any scaling of the canvas element itself
+            const scaleX = self.canvas.width / rect.width;
+            const scaleY = self.canvas.height / rect.height;
+            const canvasX = (event.clientX - rect.left) * scaleX;
+            const canvasY = (event.clientY - rect.top) * scaleY;
             
             if (!self.isDragging || self.draggedCorner === null) {
                 // Update cursor style based on hover
