@@ -29,11 +29,11 @@ $(function () {
         self.ctx = null;
         self.img = null;
         self.isDragging = false;
-        self.dragStartX = 0;
-        self.dragStartY = 0;
+        self.draggedCorner = null;
         self.scale = 1;
         self.imageWidth = 0;
         self.imageHeight = 0;
+        self.handleSize = 12;
 
         self.snapshot_valid = ko.pureComputed(function(){
             return self.settingsViewModel.webcam_snapshotUrl().length > 0 && self.settingsViewModel.webcam_snapshotUrl().startsWith('http');
@@ -147,17 +147,34 @@ $(function () {
                 self.imageWidth = response.width;
                 self.imageHeight = response.height;
                 
-                // Initialize crop coordinates if not set
+                // Initialize crop coordinates if not set (create rectangle covering full image)
                 if (self.settingsViewModel.settings.plugins.bedready.crop_x2() === 0 ||
                     self.settingsViewModel.settings.plugins.bedready.crop_y2() === 0) {
+                    // Top-left
                     self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
                     self.settingsViewModel.settings.plugins.bedready.crop_y1(0);
+                    // Top-right
                     self.settingsViewModel.settings.plugins.bedready.crop_x2(self.imageWidth);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y2(self.imageHeight);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y2(0);
+                    // Bottom-right
+                    self.settingsViewModel.settings.plugins.bedready.crop_x3(self.imageWidth);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y3(self.imageHeight);
+                    // Bottom-left
+                    self.settingsViewModel.settings.plugins.bedready.crop_x4(0);
+                    self.settingsViewModel.settings.plugins.bedready.crop_y4(self.imageHeight);
                 }
                 
                 self.drawCanvas();
             });
+        };
+        
+        self.getCorners = function() {
+            return [
+                {x: self.settingsViewModel.settings.plugins.bedready.crop_x1(), y: self.settingsViewModel.settings.plugins.bedready.crop_y1()},
+                {x: self.settingsViewModel.settings.plugins.bedready.crop_x2(), y: self.settingsViewModel.settings.plugins.bedready.crop_y2()},
+                {x: self.settingsViewModel.settings.plugins.bedready.crop_x3(), y: self.settingsViewModel.settings.plugins.bedready.crop_y3()},
+                {x: self.settingsViewModel.settings.plugins.bedready.crop_x4(), y: self.settingsViewModel.settings.plugins.bedready.crop_y4()}
+            ];
         };
         
         self.drawCanvas = function() {
@@ -172,31 +189,67 @@ $(function () {
             // Draw image
             self.ctx.drawImage(self.img, 0, 0, self.canvas.width, self.canvas.height);
             
-            // Draw crop rectangle
-            const x1 = self.settingsViewModel.settings.plugins.bedready.crop_x1() * self.scale;
-            const y1 = self.settingsViewModel.settings.plugins.bedready.crop_y1() * self.scale;
-            const x2 = self.settingsViewModel.settings.plugins.bedready.crop_x2() * self.scale;
-            const y2 = self.settingsViewModel.settings.plugins.bedready.crop_y2() * self.scale;
+            // Get corners in scaled coordinates
+            const corners = self.getCorners();
+            const scaledCorners = corners.map(c => ({x: c.x * self.scale, y: c.y * self.scale}));
             
-            // Dim area outside crop
+            // Draw dimmed overlay outside the quadrilateral
+            self.ctx.save();
             self.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            self.ctx.fillRect(0, 0, self.canvas.width, y1);
-            self.ctx.fillRect(0, y2, self.canvas.width, self.canvas.height - y2);
-            self.ctx.fillRect(0, y1, x1, y2 - y1);
-            self.ctx.fillRect(x2, y1, self.canvas.width - x2, y2 - y1);
             
-            // Draw rectangle border
+            // Create clipping path for the area outside the quadrilateral
+            self.ctx.beginPath();
+            self.ctx.rect(0, 0, self.canvas.width, self.canvas.height);
+            self.ctx.moveTo(scaledCorners[0].x, scaledCorners[0].y);
+            for (let i = 1; i < scaledCorners.length; i++) {
+                self.ctx.lineTo(scaledCorners[i].x, scaledCorners[i].y);
+            }
+            self.ctx.closePath();
+            self.ctx.fill('evenodd');
+            self.ctx.restore();
+            
+            // Draw quadrilateral border
             self.ctx.strokeStyle = '#00ff00';
             self.ctx.lineWidth = 2;
-            self.ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            self.ctx.beginPath();
+            self.ctx.moveTo(scaledCorners[0].x, scaledCorners[0].y);
+            for (let i = 1; i < scaledCorners.length; i++) {
+                self.ctx.lineTo(scaledCorners[i].x, scaledCorners[i].y);
+            }
+            self.ctx.closePath();
+            self.ctx.stroke();
             
             // Draw corner handles
-            const handleSize = 8;
             self.ctx.fillStyle = '#00ff00';
-            self.ctx.fillRect(x1 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
-            self.ctx.fillRect(x2 - handleSize/2, y1 - handleSize/2, handleSize, handleSize);
-            self.ctx.fillRect(x1 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
-            self.ctx.fillRect(x2 - handleSize/2, y2 - handleSize/2, handleSize, handleSize);
+            scaledCorners.forEach((corner, idx) => {
+                self.ctx.fillRect(
+                    corner.x - self.handleSize/2, 
+                    corner.y - self.handleSize/2, 
+                    self.handleSize, 
+                    self.handleSize
+                );
+                
+                // Draw corner number
+                self.ctx.fillStyle = '#fff';
+                self.ctx.font = '12px Arial';
+                self.ctx.fillText((idx + 1).toString(), corner.x + 10, corner.y - 10);
+                self.ctx.fillStyle = '#00ff00';
+            });
+        };
+        
+        self.findCornerAtPosition = function(x, y) {
+            const corners = self.getCorners();
+            const threshold = self.handleSize / self.scale;
+            
+            for (let i = 0; i < corners.length; i++) {
+                const dx = corners[i].x - x;
+                const dy = corners[i].y - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < threshold) {
+                    return i;
+                }
+            }
+            return null;
         };
         
         self.startCrop = function(data, event) {
@@ -204,28 +257,39 @@ $(function () {
             const x = (event.clientX - rect.left) / self.scale;
             const y = (event.clientY - rect.top) / self.scale;
             
-            self.isDragging = true;
-            self.dragStartX = x;
-            self.dragStartY = y;
+            self.draggedCorner = self.findCornerAtPosition(x, y);
+            if (self.draggedCorner !== null) {
+                self.isDragging = true;
+            }
             return false;
         };
         
         self.moveCrop = function(data, event) {
-            if (!self.isDragging) return;
+            if (!self.isDragging || self.draggedCorner === null) return;
             
             const rect = self.canvas.getBoundingClientRect();
             const x = Math.max(0, Math.min(self.imageWidth, (event.clientX - rect.left) / self.scale));
             const y = Math.max(0, Math.min(self.imageHeight, (event.clientY - rect.top) / self.scale));
             
-            const x1 = Math.min(self.dragStartX, x);
-            const y1 = Math.min(self.dragStartY, y);
-            const x2 = Math.max(self.dragStartX, x);
-            const y2 = Math.max(self.dragStartY, y);
-            
-            self.settingsViewModel.settings.plugins.bedready.crop_x1(Math.round(x1));
-            self.settingsViewModel.settings.plugins.bedready.crop_y1(Math.round(y1));
-            self.settingsViewModel.settings.plugins.bedready.crop_x2(Math.round(x2));
-            self.settingsViewModel.settings.plugins.bedready.crop_y2(Math.round(y2));
+            // Update the specific corner being dragged
+            switch(self.draggedCorner) {
+                case 0:
+                    self.settingsViewModel.settings.plugins.bedready.crop_x1(Math.round(x));
+                    self.settingsViewModel.settings.plugins.bedready.crop_y1(Math.round(y));
+                    break;
+                case 1:
+                    self.settingsViewModel.settings.plugins.bedready.crop_x2(Math.round(x));
+                    self.settingsViewModel.settings.plugins.bedready.crop_y2(Math.round(y));
+                    break;
+                case 2:
+                    self.settingsViewModel.settings.plugins.bedready.crop_x3(Math.round(x));
+                    self.settingsViewModel.settings.plugins.bedready.crop_y3(Math.round(y));
+                    break;
+                case 3:
+                    self.settingsViewModel.settings.plugins.bedready.crop_x4(Math.round(x));
+                    self.settingsViewModel.settings.plugins.bedready.crop_y4(Math.round(y));
+                    break;
+            }
             
             self.drawCanvas();
             return false;
@@ -233,11 +297,13 @@ $(function () {
         
         self.endCrop = function(data, event) {
             self.isDragging = false;
+            self.draggedCorner = null;
             return false;
         };
         
         self.cancelCrop = function(data, event) {
             self.isDragging = false;
+            self.draggedCorner = null;
             return false;
         };
         
@@ -246,21 +312,37 @@ $(function () {
             const x1 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0));
             const y1 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1()) || 0));
             const x2 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || self.imageWidth));
-            const y2 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || self.imageHeight));
+            const y2 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || 0));
+            const x3 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3()) || self.imageWidth));
+            const y3 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y3()) || self.imageHeight));
+            const x4 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4()) || 0));
+            const y4 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4()) || self.imageHeight));
             
             self.settingsViewModel.settings.plugins.bedready.crop_x1(x1);
             self.settingsViewModel.settings.plugins.bedready.crop_y1(y1);
             self.settingsViewModel.settings.plugins.bedready.crop_x2(x2);
             self.settingsViewModel.settings.plugins.bedready.crop_y2(y2);
+            self.settingsViewModel.settings.plugins.bedready.crop_x3(x3);
+            self.settingsViewModel.settings.plugins.bedready.crop_y3(y3);
+            self.settingsViewModel.settings.plugins.bedready.crop_x4(x4);
+            self.settingsViewModel.settings.plugins.bedready.crop_y4(y4);
             
             self.drawCanvas();
         };
         
         self.resetCrop = function() {
+            // Top-left
             self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
             self.settingsViewModel.settings.plugins.bedready.crop_y1(0);
+            // Top-right
             self.settingsViewModel.settings.plugins.bedready.crop_x2(self.imageWidth);
-            self.settingsViewModel.settings.plugins.bedready.crop_y2(self.imageHeight);
+            self.settingsViewModel.settings.plugins.bedready.crop_y2(0);
+            // Bottom-right
+            self.settingsViewModel.settings.plugins.bedready.crop_x3(self.imageWidth);
+            self.settingsViewModel.settings.plugins.bedready.crop_y3(self.imageHeight);
+            // Bottom-left
+            self.settingsViewModel.settings.plugins.bedready.crop_x4(0);
+            self.settingsViewModel.settings.plugins.bedready.crop_y4(self.imageHeight);
             self.drawCanvas();
         };
 

@@ -20,20 +20,24 @@
     </div>
   </div>
   <div class="control-group" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
-    <label class="control-label">{{ _('Crop Coordinates') }}</label>
+    <label class="control-label">{{ _('Crop Coordinates (4 Corners)') }}</label>
     <div class="controls">
       <div class="row-fluid">
         <div class="span3">
-          <label>X1: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 1 X: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 1 Y: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
         </div>
         <div class="span3">
-          <label>Y1: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y1, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 2 X: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 2 Y: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
         </div>
         <div class="span3">
-          <label>X2: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 3 X: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x3, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 3 Y: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y3, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
         </div>
         <div class="span3">
-          <label>Y2: <input type="number" style="width: 80px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y2, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 4 X: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_x4, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
+          <label>Corner 4 Y: <input type="number" style="width: 60px;" data-bind="value: settingsViewModel.settings.plugins.bedready.crop_y4, valueUpdate: 'input', event: {change: updateCropFromInputs}"></label>
         </div>
       </div>
     </div>

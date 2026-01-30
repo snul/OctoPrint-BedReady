@@ -109,7 +109,11 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             "crop_x1": 0,
             "crop_y1": 0,
             "crop_x2": 0,
-            "crop_y2": 0
+            "crop_y2": 0,
+            "crop_x3": 0,
+            "crop_y3": 0,
+            "crop_x4": 0,
+            "crop_y4": 0
         }
 
     # ~~ AssetPlugin mixin
@@ -139,19 +143,38 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
 
     def compare_images(self, reference_image, comparison_image):
         import cv2
+        import numpy as np
         reference_image = cv2.imread(reference_image)
         comparison_image = cv2.imread(comparison_image)
         
-        # Get crop coordinates from settings
+        # Get crop coordinates from settings (4 corners)
         x1 = self._settings.get_int(["crop_x1"])
         y1 = self._settings.get_int(["crop_y1"])
         x2 = self._settings.get_int(["crop_x2"])
         y2 = self._settings.get_int(["crop_y2"])
+        x3 = self._settings.get_int(["crop_x3"])
+        y3 = self._settings.get_int(["crop_y3"])
+        x4 = self._settings.get_int(["crop_x4"])
+        y4 = self._settings.get_int(["crop_y4"])
         
-        # Crop images if coordinates are set (x2 and y2 > 0)
-        if x2 > 0 and y2 > 0:
-            reference_image = reference_image[y1:y2, x1:x2]
-            comparison_image = comparison_image[y1:y2, x1:x2]
+        # Apply perspective transform if coordinates are set
+        if x2 > 0 and y2 > 0 and x3 > 0 and y3 > 0:
+            # Define source points (the quadrilateral in the image)
+            src_pts = np.float32([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
+            
+            # Calculate destination rectangle size (bounding box of the quadrilateral)
+            width = int(max(np.linalg.norm(src_pts[0] - src_pts[1]), np.linalg.norm(src_pts[2] - src_pts[3])))
+            height = int(max(np.linalg.norm(src_pts[1] - src_pts[2]), np.linalg.norm(src_pts[3] - src_pts[0])))
+            
+            # Define destination points (rectangular output)
+            dst_pts = np.float32([[0, 0], [width, 0], [width, height], [0, height]])
+            
+            # Get perspective transform matrix
+            matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+            
+            # Apply transform to both images
+            reference_image = cv2.warpPerspective(reference_image, matrix, (width, height))
+            comparison_image = cv2.warpPerspective(comparison_image, matrix, (width, height))
         
         height, width, channels = reference_image.shape
         pixel_difference = cv2.norm(reference_image, comparison_image, cv2.NORM_L2)
