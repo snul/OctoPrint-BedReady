@@ -178,9 +178,6 @@ $(function () {
                     self.settingsViewModel.settings.plugins.bedready.crop_y4(self.imageHeight);
                 }
                 
-                console.log("BedReady: Image loaded", self.imageWidth, "x", self.imageHeight);
-                console.log("BedReady: Crop corners initialized:", self.getCorners());
-                
                 self.drawCanvas();
             });
         };
@@ -260,11 +257,7 @@ $(function () {
         
         self.findCornerAtPosition = function(x, y) {
             const corners = self.getCorners();
-            const threshold = self.handleSize * 1.5; // Threshold in canvas pixels, not image pixels
-            
-            console.log("BedReady: Finding corner at canvas position", x, y);
-            console.log("BedReady: Corners in image coords:", corners);
-            console.log("BedReady: Scale:", self.scale, "Threshold:", threshold);
+            const threshold = self.handleSize * 2; // Larger threshold for easier selection
             
             for (let i = 0; i < corners.length; i++) {
                 // Convert corner position to canvas coordinates
@@ -273,13 +266,10 @@ $(function () {
                 const dx = cornerX - x;
                 const dy = cornerY - y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                console.log("BedReady: Corner", i, "canvas pos:", cornerX, cornerY, "distance:", distance);
                 if (distance < threshold) {
-                    console.log("BedReady: Found corner", i);
                     return i;
                 }
             }
-            console.log("BedReady: No corner found");
             return null;
         };
         
