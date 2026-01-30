@@ -178,16 +178,23 @@ $(function () {
                     self.settingsViewModel.settings.plugins.bedready.crop_y4(self.imageHeight);
                 }
                 
+                console.log("BedReady: Image loaded", self.imageWidth, "x", self.imageHeight);
+                console.log("BedReady: Crop corners initialized:", self.getCorners());
+                
                 self.drawCanvas();
             });
         };
         
         self.getCorners = function() {
             return [
-                {x: self.settingsViewModel.settings.plugins.bedready.crop_x1(), y: self.settingsViewModel.settings.plugins.bedready.crop_y1()},
-                {x: self.settingsViewModel.settings.plugins.bedready.crop_x2(), y: self.settingsViewModel.settings.plugins.bedready.crop_y2()},
-                {x: self.settingsViewModel.settings.plugins.bedready.crop_x3(), y: self.settingsViewModel.settings.plugins.bedready.crop_y3()},
-                {x: self.settingsViewModel.settings.plugins.bedready.crop_x4(), y: self.settingsViewModel.settings.plugins.bedready.crop_y4()}
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0, 
+                 y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1()) || 0},
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || 0, 
+                 y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || 0},
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3()) || 0, 
+                 y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y3()) || 0},
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4()) || 0, 
+                 y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4()) || 0}
             ];
         };
         
@@ -255,6 +262,10 @@ $(function () {
             const corners = self.getCorners();
             const threshold = self.handleSize * 1.5; // Threshold in canvas pixels, not image pixels
             
+            console.log("BedReady: Finding corner at canvas position", x, y);
+            console.log("BedReady: Corners in image coords:", corners);
+            console.log("BedReady: Scale:", self.scale, "Threshold:", threshold);
+            
             for (let i = 0; i < corners.length; i++) {
                 // Convert corner position to canvas coordinates
                 const cornerX = corners[i].x * self.scale;
@@ -262,10 +273,13 @@ $(function () {
                 const dx = cornerX - x;
                 const dy = cornerY - y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
+                console.log("BedReady: Corner", i, "canvas pos:", cornerX, cornerY, "distance:", distance);
                 if (distance < threshold) {
+                    console.log("BedReady: Found corner", i);
                     return i;
                 }
             }
+            console.log("BedReady: No corner found");
             return null;
         };
         
