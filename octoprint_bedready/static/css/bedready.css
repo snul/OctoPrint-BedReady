@@ -11,12 +11,7 @@ div.ui-pnotify.bedready_notice > div.ui-pnotify-container > div.ui-pnotify-icon 
 }
 
 #bedready-crop-canvas {
-    border: 2px solid #ccc;
     cursor: crosshair;
     display: block;
     max-width: 100%;
-}
-
-#bedready-crop-canvas:hover {
-    border-color: #00ff00;
 }
