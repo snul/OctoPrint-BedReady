@@ -46,8 +46,10 @@ $(function () {
 
             if (data.hasOwnProperty('similarity') && !data.bed_clear) {
                 const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
-                const reference_url = 'plugin/bedready/images/' + data.reference_image;
-                const test_url = 'plugin/bedready/images/' + data.test_image;
+                const timestamp = new Date().getTime();
+                // Use unique image urls to prevent issues with browser caching
+                const reference_url = 'plugin/bedready/images/' + data.reference_image + '?t=' + timestamp;
+                const test_url = 'plugin/bedready/images/' + data.test_image + '?t=' + timestamp;
                 self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p><p>Print job has been paused, check the bed and then resume.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                 self.popup_options.type = 'error';
                 self.popup_options.title = 'Bed Not Ready';
@@ -406,8 +408,10 @@ $(function () {
             OctoPrint.simpleApiCommand('bedready', 'check_bed', {reference: self.settingsViewModel.settings.plugins.bedready.reference_image()})
                 .done(function (response) {
                     const similarity_pct = (parseFloat(response.similarity) * 100).toFixed(2);
-                    const reference_url = 'plugin/bedready/images/' + response.reference_image;
-                    const test_url = 'plugin/bedready/images/' + response.test_image;
+                    const timestamp = new Date().getTime();
+                    // Use unique image urls to prevent issues with browser caching
+                    const reference_url = 'plugin/bedready/images/' + response.reference_image + '?t=' + timestamp;
+                    const test_url = 'plugin/bedready/images/' + response.test_image + '?t=' + timestamp;
                     self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                     if (parseFloat(response.similarity) < parseFloat(self.settingsViewModel.settings.plugins.bedready.match_percentage())) {
                         self.popup_options.type = 'error';
