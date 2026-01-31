@@ -4,6 +4,10 @@ div.ui-pnotify.bedready_notice > div.ui-pnotify-container > div.ui-pnotify-icon 
     padding-top: 3px;
 }
 
+.well-info {
+    margin-bottom: 5px;
+}
+
 .bedready-crop-container {
     position: relative;
     display: inline-block;
