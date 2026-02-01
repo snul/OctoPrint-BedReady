@@ -186,29 +186,48 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     # ~~ @ command hook
 
     def process_at_command(self, comm, phase, command, parameters, tags=None, *args, **kwargs):
-        if command.upper() != "BEDREADY":
-            return
-
-        reference = None
-        match_percentage = None
-        parameters = parameters.split()
-        if len(parameters) > 0:
-            reference = parameters[0]
-        if len(parameters) > 1:
-            match_percentage = float(parameters[1])
-
-        with self._printer.job_on_hold():
+        if command.upper() == "BEDREADY_CAPTURE":
+            # Take snapshot and set as reference image
+            filename = "reference_{}.jpg".format(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+            
             try:
-                message = self.check_bed(reference, match_percentage)
-                self._logger.debug("match: {}".format(message))
-                if not message.get("bed_clear"):
-                    if self._settings.get_boolean(["cancel_print"]):
-                        self._printer.cancel_print(tags={self._identifier})
-                    else:
-                        self._printer.pause_print(tags={self._identifier})
-                self._plugin_manager.send_plugin_message(self._identifier, message)
+                self.take_snapshot(filename)
+                self._settings.set(["reference_image"], filename)
+                self._settings.save()
+                self._logger.info(f"Reference image set to {filename}")
+                self._plugin_manager.send_plugin_message(self._identifier, {
+                    "reference_set": True,
+                    "reference_image": filename
+                })
             except Exception as e:
-                self._logger.info(e)
+                self._logger.error(f"Error setting reference image: {e}")
+                self._plugin_manager.send_plugin_message(self._identifier, {
+                    "reference_set": False,
+                    "error": str(e)
+                })
+            return
+        
+        if command.upper() == "BEDREADY":
+            reference = None
+            match_percentage = None
+            parameters = parameters.split()
+            if len(parameters) > 0:
+                reference = parameters[0]
+            if len(parameters) > 1:
+                match_percentage = float(parameters[1])
+
+            with self._printer.job_on_hold():
+                try:
+                    message = self.check_bed(reference, match_percentage)
+                    self._logger.debug("match: {}".format(message))
+                    if not message.get("bed_clear"):
+                        if self._settings.get_boolean(["cancel_print"]):
+                            self._printer.cancel_print(tags={self._identifier})
+                        else:
+                            self._printer.pause_print(tags={self._identifier})
+                    self._plugin_manager.send_plugin_message(self._identifier, message)
+                except Exception as e:
+                    self._logger.info(e)
 
     def check_bed(self, reference=None, match_percentage=None):
         if reference == None:

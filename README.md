@@ -45,6 +45,12 @@ self.take_snapshot("new_snapshot.jpg")
 self.check_bed("new_snapshot.jpg", 0.8)
 ```
 
+## GCODE Commands
+
+`@BEDREADY [reference_image] [match_percentage]` - Checks if bed matches reference image. Pauses/cancels print if bed is not clear.
+
+`@BEDREADY_CAPTURE [filename]` - Takes snapshot and sets it as reference image.
+
 ## OctoPi
 
 If there are any issues with OpenCV (cv2) on OctoPi, try installing the following package:
