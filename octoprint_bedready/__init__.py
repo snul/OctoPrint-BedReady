@@ -39,6 +39,9 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             get_image_dimensions=["filename"],
         )
 
+    def is_api_protected(self):
+        return True
+
     def get_snapshots(self):
         return [f for f in os.listdir(self.get_plugin_data_folder()) 
                 if os.path.isfile(os.path.join(self.get_plugin_data_folder(), f))
