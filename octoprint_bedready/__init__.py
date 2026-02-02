@@ -12,6 +12,9 @@ from octoprint.events import Events
 TEST_FILENAME = "test.jpg"
 COMPARISON_FILENAME = "comparison.jpg"
 
+# for images taken with the BEDREADY_CAPTURE command
+REFERENCE_FILENAME = "reference.jpg"
+
 class SnapshotError(Exception):
     pass
 
@@ -188,7 +191,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def process_at_command(self, comm, phase, command, parameters, tags=None, *args, **kwargs):
         if command.upper() == "BEDREADY_CAPTURE":
             # Take snapshot and set as reference image
-            filename = "reference.jpg"
+            filename = REFERENCE_FILENAME
             
             try:
                 self.take_snapshot(filename)
