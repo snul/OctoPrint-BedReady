@@ -188,7 +188,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def process_at_command(self, comm, phase, command, parameters, tags=None, *args, **kwargs):
         if command.upper() == "BEDREADY_CAPTURE":
             # Take snapshot and set as reference image
-            filename = "reference_{}.jpg".format(datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
+            filename = "reference.jpg"
             
             try:
                 self.take_snapshot(filename)
