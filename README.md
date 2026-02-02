@@ -49,7 +49,7 @@ self.check_bed("new_snapshot.jpg", 0.8)
 
 `@BEDREADY [reference_image] [match_percentage]` - Checks if bed matches reference image. Pauses/cancels print if bed is not clear.
 
-`@BEDREADY_CAPTURE [filename]` - Takes snapshot and sets it as reference image.
+`@BEDREADY_CAPTURE` - Takes snapshot and sets it as reference image.
 
 ## OctoPi
 
