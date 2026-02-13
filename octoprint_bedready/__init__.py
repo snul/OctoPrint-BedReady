@@ -12,6 +12,13 @@ from octoprint.events import Events
 TEST_FILENAME = "test.jpg"
 COMPARISON_FILENAME = "comparison.jpg"
 
+# for images taken with the BEDREADY_CAPTURE command
+REFERENCE_FILENAME = "reference.jpg"
+
+# for debug comparison images
+DEBUG_IMAGE_PREFIX = "debug_comparison_"
+MAX_DEBUG_IMAGES = 5
+
 class SnapshotError(Exception):
     pass
 
@@ -36,14 +43,82 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             check_bed=[],
             list_snapshots=[],
             delete_snapshot=["filename"],
+            get_image_dimensions=["filename"],
+            list_debug_images=[],
+            delete_debug_image=["filename"],
         )
+
+    def is_api_protected(self):
+        return True
 
     def get_snapshots(self):
         return [f for f in os.listdir(self.get_plugin_data_folder()) 
                 if os.path.isfile(os.path.join(self.get_plugin_data_folder(), f))
                 and os.path.splitext(f)[1] == '.jpg'
                 and not f in (TEST_FILENAME, COMPARISON_FILENAME)
+                and not f.startswith(DEBUG_IMAGE_PREFIX)
             ]
+    
+    def get_debug_images(self):
+        """Get list of debug comparison images with their metadata."""
+        debug_files = [f for f in os.listdir(self.get_plugin_data_folder())
+                      if os.path.isfile(os.path.join(self.get_plugin_data_folder(), f))
+                      and f.startswith(DEBUG_IMAGE_PREFIX)
+                      and os.path.splitext(f)[1] == '.jpg']
+        
+        # Sort by timestamp (newest first)
+        debug_files.sort(reverse=True)
+        
+        # Parse metadata from filenames: debug_comparison_YYYYMMDD_HHMMSS_threshold.jpg
+        debug_info = []
+        for f in debug_files:
+            try:
+                # Extract timestamp and threshold from filename
+                parts = f.replace(DEBUG_IMAGE_PREFIX, '').replace('.jpg', '').split('_')
+                if len(parts) >= 4:
+                    date_part = parts[0]
+                    time_part = parts[1]
+                    # Reconstruct threshold from parts[2] and parts[3] (e.g., "0" and "9842" -> 0.9842)
+                    threshold = float(f"{parts[2]}.{parts[3]}")
+                    timestamp = f"{date_part}_{time_part}"
+                    debug_info.append({
+                        'filename': f,
+                        'timestamp': timestamp,
+                        'threshold': threshold
+                    })
+            except:
+                # Skip files that don't match expected format
+                pass
+        
+        return debug_info
+    
+    def store_debug_image(self, comparison_image_path, threshold):
+        """Store a debug comparison image with threshold in filename."""
+        if not self._settings.get_boolean(["debug_mode"]):
+            return
+        
+        # Create filename with timestamp and threshold
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Format threshold to 4 decimal places, replacing . with underscore for filename
+        threshold_str = f"{threshold:.4f}".replace('.', '_')
+        debug_filename = f"{DEBUG_IMAGE_PREFIX}{timestamp}_{threshold_str}.jpg"
+        debug_path = os.path.join(self.get_plugin_data_folder(), debug_filename)
+        
+        # Copy the comparison image
+        import shutil
+        shutil.copy2(comparison_image_path, debug_path)
+        
+        # Clean up old debug images (keep only last MAX_DEBUG_IMAGES)
+        debug_images = self.get_debug_images()
+        if len(debug_images) > MAX_DEBUG_IMAGES:
+            # Delete oldest images (they're sorted newest first)
+            for img in debug_images[MAX_DEBUG_IMAGES:]:
+                try:
+                    old_path = os.path.join(self.get_plugin_data_folder(), img['filename'])
+                    os.unlink(old_path)
+                    self._logger.info(f"Deleted old debug image: {img['filename']}")
+                except Exception as e:
+                    self._logger.error(f"Error deleting old debug image: {e}")
 
     def on_api_command(self, command, data):
         import flask
@@ -68,6 +143,30 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             elif not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
             p.unlink()
+        elif command == "get_image_dimensions":
+            try:
+                import cv2
+                filename = data.get("filename")
+                image_path = os.path.join(self.get_plugin_data_folder(), filename)
+                img = cv2.imread(image_path)
+                if img is None:
+                    return flask.jsonify(dict(error="Unable to read image"))
+                height, width = img.shape[:2]
+                return flask.jsonify(dict(width=width, height=height))
+            except Exception as e:
+                return flask.jsonify(dict(error=str(e)))
+        elif command == "list_debug_images":
+            return flask.jsonify(self.get_debug_images())
+        elif command == "delete_debug_image":
+            p = Path(self.get_plugin_data_folder()) / data.get("filename")
+            if not p.relative_to(self.get_plugin_data_folder()):
+                raise ValueError("Path is outside of plugin data folder")
+            elif not p.exists() or not p.is_file():
+                raise ValueError("Path is not a file")
+            elif not p.name.startswith(DEBUG_IMAGE_PREFIX):
+                raise ValueError("Can only delete debug images")
+            p.unlink()
+            return flask.jsonify(self.get_debug_images())
 
     def take_snapshot(self, filename=None):
         snapshot_url = self._settings.global_get(["webcam", "snapshot"])
@@ -92,7 +191,16 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         return {
             "reference_image": "",
             "match_percentage": 0.98,
-            "cancel_print": False
+            "cancel_print": False,
+            "crop_x1": 0,
+            "crop_y1": 0,
+            "crop_x2": 0,
+            "crop_y2": 0,
+            "crop_x3": 0,
+            "crop_y3": 0,
+            "crop_x4": 0,
+            "crop_y4": 0,
+            "debug_mode": False
         }
 
     # ~~ AssetPlugin mixin
@@ -122,8 +230,39 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
 
     def compare_images(self, reference_image, comparison_image):
         import cv2
+        import numpy as np
         reference_image = cv2.imread(reference_image)
         comparison_image = cv2.imread(comparison_image)
+        
+        # Get crop coordinates from settings (4 corners)
+        x1 = self._settings.get_int(["crop_x1"])
+        y1 = self._settings.get_int(["crop_y1"])
+        x2 = self._settings.get_int(["crop_x2"])
+        y2 = self._settings.get_int(["crop_y2"])
+        x3 = self._settings.get_int(["crop_x3"])
+        y3 = self._settings.get_int(["crop_y3"])
+        x4 = self._settings.get_int(["crop_x4"])
+        y4 = self._settings.get_int(["crop_y4"])
+        
+        # Apply perspective transform if coordinates are set
+        if x2 > 0 and y2 > 0 and x3 > 0 and y3 > 0:
+            # Define source points (the quadrilateral in the image)
+            src_pts = np.float32([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
+            
+            # Calculate destination rectangle size (bounding box of the quadrilateral)
+            width = int(max(np.linalg.norm(src_pts[0] - src_pts[1]), np.linalg.norm(src_pts[2] - src_pts[3])))
+            height = int(max(np.linalg.norm(src_pts[1] - src_pts[2]), np.linalg.norm(src_pts[3] - src_pts[0])))
+            
+            # Define destination points (rectangular output)
+            dst_pts = np.float32([[0, 0], [width, 0], [width, height], [0, height]])
+            
+            # Get perspective transform matrix
+            matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+            
+            # Apply transform to both images
+            reference_image = cv2.warpPerspective(reference_image, matrix, (width, height))
+            comparison_image = cv2.warpPerspective(comparison_image, matrix, (width, height))
+        
         height, width, channels = reference_image.shape
         pixel_difference = cv2.norm(reference_image, comparison_image, cv2.NORM_L2)
         return 1 - pixel_difference / (height * width)
@@ -131,31 +270,50 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     # ~~ @ command hook
 
     def process_at_command(self, comm, phase, command, parameters, tags=None, *args, **kwargs):
-        if command.upper() != "BEDREADY":
-            return
-
-        reference = None
-        match_percentage = None
-        parameters = parameters.split()
-        if len(parameters) > 0:
-            reference = parameters[0]
-        if len(parameters) > 1:
-            match_percentage = float(parameters[1])
-
-        with self._printer.job_on_hold():
+        if command.upper() == "BEDREADY_CAPTURE":
+            # Take snapshot and set as reference image
+            filename = REFERENCE_FILENAME
+            
             try:
-                message = self.check_bed(reference, match_percentage)
-                self._logger.debug("match: {}".format(message))
-                if not message.get("bed_clear"):
-                    if self._settings.get_boolean(["cancel_print"]):
-                        self._printer.cancel_print(tags={self._identifier})
-                    else:
-                        self._printer.pause_print(tags={self._identifier})
-                self._plugin_manager.send_plugin_message(self._identifier, message)
+                self.take_snapshot(filename)
+                self._settings.set(["reference_image"], filename)
+                self._settings.save()
+                self._logger.info(f"Reference image set to {filename}")
+                self._plugin_manager.send_plugin_message(self._identifier, {
+                    "reference_set": True,
+                    "reference_image": filename
+                })
             except Exception as e:
-                self._logger.info(e)
+                self._logger.error(f"Error setting reference image: {e}")
+                self._plugin_manager.send_plugin_message(self._identifier, {
+                    "reference_set": False,
+                    "error": str(e)
+                })
+            return
+        
+        if command.upper() == "BEDREADY":
+            reference = None
+            match_percentage = None
+            parameters = parameters.split()
+            if len(parameters) > 0:
+                reference = parameters[0]
+            if len(parameters) > 1:
+                match_percentage = float(parameters[1])
 
-    def check_bed(self, reference=None, match_percentage=None):
+            with self._printer.job_on_hold():
+                try:
+                    message = self.check_bed(reference, match_percentage, store_debug=True)
+                    self._logger.debug("match: {}".format(message))
+                    if not message.get("bed_clear"):
+                        if self._settings.get_boolean(["cancel_print"]):
+                            self._printer.cancel_print(tags={self._identifier})
+                        else:
+                            self._printer.pause_print(tags={self._identifier})
+                    self._plugin_manager.send_plugin_message(self._identifier, message)
+                except Exception as e:
+                    self._logger.info(e)
+
+    def check_bed(self, reference=None, match_percentage=None, store_debug=False):
         if reference == None:
             reference = self._settings.get(["reference_image"])
         if match_percentage == None:
@@ -167,6 +325,11 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             similarity = self.compare_images(
                 os.path.join(self.get_plugin_data_folder(), reference),
                 os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME))
+            
+            # Store debug image if requested (from @BEDREADY command, not manual test)
+            if store_debug:
+                comparison_path = os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME)
+                self.store_debug_image(comparison_path, similarity)
         except Exception as e:
             self._logger.exception("Error during snapshot comparison:")
 
