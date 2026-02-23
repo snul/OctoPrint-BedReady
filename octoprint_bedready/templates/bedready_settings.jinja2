@@ -10,7 +10,7 @@
     <div class="controls">
       <div class="bedready-crop-container" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
         <canvas id="bedready-crop-canvas"></canvas>
-        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + $root.normalizeImagePath(settingsViewModel.settings.plugins.bedready.reference_image())}, event: {load: imageLoaded}" style="display:none;">
+        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + normalized_reference_image()}, event: {load: imageLoaded}" style="display:none;">
       </div>
       <p>
         <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button> 

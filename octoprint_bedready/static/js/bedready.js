@@ -12,11 +12,14 @@ $(function () {
         // Removes the 'plugin/bedready/images/' prefix if it exists (from older versions)
         self.normalizeImagePath = function(path) {
             if (!path) return '';
+            // Remove leading slash if present
+            let cleanPath = path.startsWith('/') ? path.substring(1) : path;
             const prefix = 'plugin/bedready/images/';
-            if (path.startsWith(prefix)) {
-                return path.substring(prefix.length);
+            // Remove the prefix if it exists
+            if (cleanPath.startsWith(prefix)) {
+                cleanPath = cleanPath.substring(prefix.length);
             }
-            return path;
+            return cleanPath;
         };
 
         self.reference_images = ko.observableArray([]);
@@ -36,6 +39,16 @@ $(function () {
 
         self.settingsViewModel = parameters[0];
         self.controlViewModel = parameters[1];
+        
+        // Create a computed observable for the normalized reference image path
+        self.normalized_reference_image = ko.computed(function() {
+            var original = self.settingsViewModel.settings.plugins.bedready.reference_image();
+            var normalized = self.normalizeImagePath(original);
+            if (original !== normalized) {
+                console.log('[BedReady] Normalized reference_image from "' + original + '" to "' + normalized + '"');
+            }
+            return normalized;
+        });
         
         // Crop editor variables
         self.canvas = null;

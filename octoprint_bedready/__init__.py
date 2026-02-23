@@ -35,13 +35,17 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         """
         Normalize image paths for backwards compatibility.
         Removes 'plugin/bedready/images/' prefix if it exists (from older versions).
+        Handles paths with or without leading slashes.
         """
         if not path:
             return ''
+        # Remove leading slash if present
+        clean_path = path.lstrip('/')
         prefix = 'plugin/bedready/images/'
-        if path.startswith(prefix):
-            return path[len(prefix):]
-        return path
+        # Remove the prefix if it exists
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+        return clean_path
 
     def on_after_startup(self):
         """Migrate old image paths on startup for backwards compatibility."""
@@ -51,6 +55,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             if normalized != reference_image:
                 self._logger.info(f"Migrating reference_image from '{reference_image}' to '{normalized}'")
                 self._settings.set(["reference_image"], normalized)
+                self._settings.save()
 
     # ~~ EventHandlerPlugin mixin
 
@@ -228,6 +233,18 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             "crop_y4": 0,
             "debug_mode": False
         }
+
+    def on_settings_load(self):
+        """Load settings and normalize any old image paths."""
+        data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
+        # Normalize the reference_image path when loading settings
+        if data.get("plugins", {}).get("bedready", {}).get("reference_image"):
+            old_path = data["plugins"]["bedready"]["reference_image"]
+            normalized = self.normalize_image_path(old_path)
+            if normalized != old_path:
+                self._logger.debug(f"Normalizing reference_image path on load: {old_path} -> {normalized}")
+                data["plugins"]["bedready"]["reference_image"] = normalized
+        return data
 
     # ~~ AssetPlugin mixin
 
