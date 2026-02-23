@@ -29,6 +29,29 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                      octoprint.plugin.EventHandlerPlugin
                      ):
 
+    # ~~ Helper methods
+
+    def normalize_image_path(self, path):
+        """
+        Normalize image paths for backwards compatibility.
+        Removes 'plugin/bedready/images/' prefix if it exists (from older versions).
+        """
+        if not path:
+            return ''
+        prefix = 'plugin/bedready/images/'
+        if path.startswith(prefix):
+            return path[len(prefix):]
+        return path
+
+    def on_after_startup(self):
+        """Migrate old image paths on startup for backwards compatibility."""
+        reference_image = self._settings.get(["reference_image"])
+        if reference_image:
+            normalized = self.normalize_image_path(reference_image)
+            if normalized != reference_image:
+                self._logger.info(f"Migrating reference_image from '{reference_image}' to '{normalized}'")
+                self._settings.set(["reference_image"], normalized)
+
     # ~~ EventHandlerPlugin mixin
 
     def on_event(self, event, payload):
@@ -148,6 +171,8 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 import cv2
                 filename = data.get("filename")
+                # Normalize path for backwards compatibility
+                filename = self.normalize_image_path(filename)
                 image_path = os.path.join(self.get_plugin_data_folder(), filename)
                 img = cv2.imread(image_path)
                 if img is None:
@@ -317,6 +342,10 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def check_bed(self, reference=None, match_percentage=None, store_debug=False):
         if reference == None:
             reference = self._settings.get(["reference_image"])
+        
+        # Normalize the reference image path for backwards compatibility
+        reference = self.normalize_image_path(reference)
+        
         if match_percentage == None:
             match_percentage = self._settings.get_float(["match_percentage"])
 

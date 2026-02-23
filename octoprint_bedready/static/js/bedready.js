@@ -8,6 +8,17 @@ $(function () {
     function BedreadyViewModel(parameters) {
         var self = this;
 
+        // Helper function to normalize image paths for backwards compatibility
+        // Removes the 'plugin/bedready/images/' prefix if it exists (from older versions)
+        self.normalizeImagePath = function(path) {
+            if (!path) return '';
+            const prefix = 'plugin/bedready/images/';
+            if (path.startsWith(prefix)) {
+                return path.substring(prefix.length);
+            }
+            return path;
+        };
+
         self.reference_images = ko.observableArray([]);
         self.taking_snapshot = ko.observable(false);
         self.debug_images = ko.observableArray([]);
@@ -50,7 +61,7 @@ $(function () {
                 const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
                 const timestamp = new Date().getTime();
                 // Use unique image urls to prevent issues with browser caching
-                const reference_url = 'plugin/bedready/images/' + data.reference_image + '?t=' + timestamp;
+                const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(data.reference_image) + '?t=' + timestamp;
                 const test_url = 'plugin/bedready/images/' + data.test_image + '?t=' + timestamp;
                 self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p><p>Print job has been paused, check the bed and then resume.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                 self.popup_options.type = 'error';
@@ -465,7 +476,7 @@ $(function () {
                     const similarity_pct = (parseFloat(response.similarity) * 100).toFixed(2);
                     const timestamp = new Date().getTime();
                     // Use unique image urls to prevent issues with browser caching
-                    const reference_url = 'plugin/bedready/images/' + response.reference_image + '?t=' + timestamp;
+                    const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(response.reference_image) + '?t=' + timestamp;
                     const test_url = 'plugin/bedready/images/' + response.test_image + '?t=' + timestamp;
                     self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                     if (parseFloat(response.similarity) < parseFloat(self.settingsViewModel.settings.plugins.bedready.match_percentage())) {
