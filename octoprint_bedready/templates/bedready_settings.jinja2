@@ -72,13 +72,13 @@
     <td>
       <img alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + $data}" style="max-width: 100px">
       </td>
-      <td data-bind="text: $data.split('/').pop()"></td>
+      <td data-bind="text: $data"></td>
       <td>
         <p>
-        <button class="btn btn-primary" data-bind="click:$root.set_default_snapshot, disable:(('plugin/bedready/images/' + $data)==('plugin/bedready/images/' + $root.settingsViewModel.settings.plugins.bedready.reference_image()))">Set as Reference</button>
+        <button class="btn btn-primary" data-bind="click: function() { $root.set_default_snapshot($data); }, disable: $data === $root.settingsViewModel.settings.plugins.bedready.reference_image()">Set as Reference</button>
         </p>
         <p>
-        <button class="btn" data-bind="click:$root.delete_snapshot">Delete</button>
+        <button class="btn" data-bind="click: function() { $root.delete_snapshot($data); }">Delete</button>
         </p>
       </td>
     </tr>

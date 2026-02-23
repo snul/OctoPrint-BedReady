@@ -92,7 +92,7 @@ $(function () {
         self.delete_snapshot = function(filename) {
           OctoPrint.simpleApiCommand('bedready', 'delete_snapshot', {filename})
               .done(function (response) {
-                self.reference_images.remove(filename);
+                self.reference_images(response);
                 new PNotify({
                     title: 'Snapshot Deleted',
                     text: filename,

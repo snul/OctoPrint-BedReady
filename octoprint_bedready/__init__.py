@@ -143,6 +143,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             elif not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
             p.unlink()
+            return flask.jsonify(self.get_snapshots())
         elif command == "get_image_dimensions":
             try:
                 import cv2
