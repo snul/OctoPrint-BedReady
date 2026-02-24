@@ -66,11 +66,12 @@ $(function () {
         self.handleSize = 12;
 
         self.snapshot_valid = ko.pureComputed(function(){
-            if (!self.settingsViewModel.settings || !self.settingsViewModel.settings.webcam) {
+            try {
+                var url = self.settingsViewModel.webcam_snapshotUrl();
+                return !!(url && url.length > 0 && url.startsWith('http'));
+            } catch(e) {
                 return false;
             }
-            var url = self.settingsViewModel.settings.webcam.snapshot();
-            return !!(url && url.length > 0 && url.startsWith('http'));
         });
 
         self.onDataUpdaterPluginMessage = function (plugin, data) {
