@@ -41,7 +41,11 @@ $(function () {
         self.controlViewModel = parameters[1];
         
         // Create a computed observable for the normalized reference image path
-        self.normalized_reference_image = ko.computed(function() {
+        // Must be pureComputed (lazy) so it doesn't evaluate before settings.plugins is available
+        self.normalized_reference_image = ko.pureComputed(function() {
+            if (!self.settingsViewModel.settings || !self.settingsViewModel.settings.plugins) {
+                return '';
+            }
             var original = self.settingsViewModel.settings.plugins.bedready.reference_image();
             var normalized = self.normalizeImagePath(original);
             if (original !== normalized) {
@@ -62,7 +66,11 @@ $(function () {
         self.handleSize = 12;
 
         self.snapshot_valid = ko.pureComputed(function(){
-            return self.settingsViewModel.webcam_snapshotUrl().length > 0 && self.settingsViewModel.webcam_snapshotUrl().startsWith('http');
+            if (!self.settingsViewModel.settings || !self.settingsViewModel.settings.webcam) {
+                return false;
+            }
+            var url = self.settingsViewModel.settings.webcam.snapshot();
+            return !!(url && url.length > 0 && url.startsWith('http'));
         });
 
         self.onDataUpdaterPluginMessage = function (plugin, data) {
