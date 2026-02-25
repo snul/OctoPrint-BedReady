@@ -29,6 +29,34 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                      octoprint.plugin.EventHandlerPlugin
                      ):
 
+    # ~~ Helper methods
+
+    def normalize_image_path(self, path):
+        """
+        Normalize image paths for backwards compatibility.
+        Removes 'plugin/bedready/images/' prefix if it exists (from older versions).
+        Handles paths with or without leading slashes.
+        """
+        if not path:
+            return ''
+        # Remove leading slash if present
+        clean_path = path.lstrip('/')
+        prefix = 'plugin/bedready/images/'
+        # Remove the prefix if it exists
+        if clean_path.startswith(prefix):
+            clean_path = clean_path[len(prefix):]
+        return clean_path
+
+    def on_after_startup(self):
+        """Migrate old image paths on startup for backwards compatibility."""
+        reference_image = self._settings.get(["reference_image"])
+        if reference_image:
+            normalized = self.normalize_image_path(reference_image)
+            if normalized != reference_image:
+                self._logger.info(f"Migrating reference_image from '{reference_image}' to '{normalized}'")
+                self._settings.set(["reference_image"], normalized)
+                self._settings.save()
+
     # ~~ EventHandlerPlugin mixin
 
     def on_event(self, event, payload):
@@ -143,10 +171,13 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             elif not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
             p.unlink()
+            return flask.jsonify(self.get_snapshots())
         elif command == "get_image_dimensions":
             try:
                 import cv2
                 filename = data.get("filename")
+                # Normalize path for backwards compatibility
+                filename = self.normalize_image_path(filename)
                 image_path = os.path.join(self.get_plugin_data_folder(), filename)
                 img = cv2.imread(image_path)
                 if img is None:
@@ -202,6 +233,18 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             "crop_y4": 0,
             "debug_mode": False
         }
+
+    def on_settings_load(self):
+        """Load settings and normalize any old image paths."""
+        data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
+        # Normalize the reference_image path when loading settings
+        if data.get("plugins", {}).get("bedready", {}).get("reference_image"):
+            old_path = data["plugins"]["bedready"]["reference_image"]
+            normalized = self.normalize_image_path(old_path)
+            if normalized != old_path:
+                self._logger.debug(f"Normalizing reference_image path on load: {old_path} -> {normalized}")
+                data["plugins"]["bedready"]["reference_image"] = normalized
+        return data
 
     # ~~ AssetPlugin mixin
 
@@ -316,6 +359,10 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def check_bed(self, reference=None, match_percentage=None, store_debug=False):
         if reference == None:
             reference = self._settings.get(["reference_image"])
+        
+        # Normalize the reference image path for backwards compatibility
+        reference = self.normalize_image_path(reference)
+        
         if match_percentage == None:
             match_percentage = self._settings.get_float(["match_percentage"])
 

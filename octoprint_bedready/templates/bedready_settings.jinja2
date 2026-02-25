@@ -10,7 +10,7 @@
     <div class="controls">
       <div class="bedready-crop-container" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
         <canvas id="bedready-crop-canvas"></canvas>
-        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + settingsViewModel.settings.plugins.bedready.reference_image()}, event: {load: imageLoaded}" style="display:none;">
+        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + normalized_reference_image()}, event: {load: imageLoaded}" style="display:none;">
       </div>
       <p>
         <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button> 
@@ -70,15 +70,15 @@
     <tbody data-bind="foreach: reference_images">
     <tr>
     <td>
-      <img alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + $data}" style="max-width: 100px">
+      <img alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + $root.normalizeImagePath($data)}" style="max-width: 100px">
       </td>
-      <td data-bind="text: $data.split('/').pop()"></td>
+      <td data-bind="text: $data"></td>
       <td>
         <p>
-        <button class="btn btn-primary" data-bind="click:$root.set_default_snapshot, disable:(('plugin/bedready/images/' + $data)==('plugin/bedready/images/' + $root.settingsViewModel.settings.plugins.bedready.reference_image()))">Set as Reference</button>
+        <button class="btn btn-primary" data-bind="click: function() { $root.set_default_snapshot($data); }, disable: $data === $root.settingsViewModel.settings.plugins.bedready.reference_image()">Set as Reference</button>
         </p>
         <p>
-        <button class="btn" data-bind="click:$root.delete_snapshot">Delete</button>
+        <button class="btn" data-bind="click: function() { $root.delete_snapshot($data); }">Delete</button>
         </p>
       </td>
     </tr>

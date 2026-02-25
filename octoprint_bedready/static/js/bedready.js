@@ -8,6 +8,20 @@ $(function () {
     function BedreadyViewModel(parameters) {
         var self = this;
 
+        // Helper function to normalize image paths for backwards compatibility
+        // Removes the 'plugin/bedready/images/' prefix if it exists (from older versions)
+        self.normalizeImagePath = function(path) {
+            if (!path) return '';
+            // Remove leading slash if present
+            let cleanPath = path.startsWith('/') ? path.substring(1) : path;
+            const prefix = 'plugin/bedready/images/';
+            // Remove the prefix if it exists
+            if (cleanPath.startsWith(prefix)) {
+                cleanPath = cleanPath.substring(prefix.length);
+            }
+            return cleanPath;
+        };
+
         self.reference_images = ko.observableArray([]);
         self.taking_snapshot = ko.observable(false);
         self.debug_images = ko.observableArray([]);
@@ -26,6 +40,20 @@ $(function () {
         self.settingsViewModel = parameters[0];
         self.controlViewModel = parameters[1];
         
+        // Create a computed observable for the normalized reference image path
+        // Must be pureComputed (lazy) so it doesn't evaluate before settings.plugins is available
+        self.normalized_reference_image = ko.pureComputed(function() {
+            if (!self.settingsViewModel.settings || !self.settingsViewModel.settings.plugins) {
+                return '';
+            }
+            var original = self.settingsViewModel.settings.plugins.bedready.reference_image();
+            var normalized = self.normalizeImagePath(original);
+            if (original !== normalized) {
+                console.log('[BedReady] Normalized reference_image from "' + original + '" to "' + normalized + '"');
+            }
+            return normalized;
+        });
+        
         // Crop editor variables
         self.canvas = null;
         self.ctx = null;
@@ -38,7 +66,12 @@ $(function () {
         self.handleSize = 12;
 
         self.snapshot_valid = ko.pureComputed(function(){
-            return self.settingsViewModel.webcam_snapshotUrl().length > 0 && self.settingsViewModel.webcam_snapshotUrl().startsWith('http');
+            try {
+                var url = self.settingsViewModel.webcam_snapshotUrl();
+                return !!(url && url.length > 0 && url.startsWith('http'));
+            } catch(e) {
+                return false;
+            }
         });
 
         self.onDataUpdaterPluginMessage = function (plugin, data) {
@@ -50,7 +83,7 @@ $(function () {
                 const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
                 const timestamp = new Date().getTime();
                 // Use unique image urls to prevent issues with browser caching
-                const reference_url = 'plugin/bedready/images/' + data.reference_image + '?t=' + timestamp;
+                const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(data.reference_image) + '?t=' + timestamp;
                 const test_url = 'plugin/bedready/images/' + data.test_image + '?t=' + timestamp;
                 self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p><p>Print job has been paused, check the bed and then resume.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                 self.popup_options.type = 'error';
@@ -92,7 +125,7 @@ $(function () {
         self.delete_snapshot = function(filename) {
           OctoPrint.simpleApiCommand('bedready', 'delete_snapshot', {filename})
               .done(function (response) {
-                self.reference_images.remove(filename);
+                self.reference_images(response);
                 new PNotify({
                     title: 'Snapshot Deleted',
                     text: filename,
@@ -465,7 +498,7 @@ $(function () {
                     const similarity_pct = (parseFloat(response.similarity) * 100).toFixed(2);
                     const timestamp = new Date().getTime();
                     // Use unique image urls to prevent issues with browser caching
-                    const reference_url = 'plugin/bedready/images/' + response.reference_image + '?t=' + timestamp;
+                    const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(response.reference_image) + '?t=' + timestamp;
                     const test_url = 'plugin/bedready/images/' + response.test_image + '?t=' + timestamp;
                     self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
                     if (parseFloat(response.similarity) < parseFloat(self.settingsViewModel.settings.plugins.bedready.match_percentage())) {
