@@ -312,8 +312,9 @@ $(function () {
                     // Bottom-left
                     bedreadySettings.crop_x4(0);
                     bedreadySettings.crop_y4(self.imageHeight);
+                }
                 
-                self.drawCanvas()
+                self.drawCanvas();
             }).fail(function(jqXHR, status, error) {
                 // Handle failure to retrieve image dimensions gracefully
                 console.error('Failed to get image dimensions for BedReady reference image:', status, error);
