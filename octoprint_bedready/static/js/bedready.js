@@ -296,10 +296,18 @@ $(function () {
                 
                 // Initialize crop coordinates if not set (create rectangle covering full image)
                 var bedreadySettings = self.settingsViewModel.settings.plugins.bedready;
-                if (bedreadySettings.crop_x1() === 0 && bedreadySettings.crop_y1() === 0 &&
-                    bedreadySettings.crop_x2() === 0 && bedreadySettings.crop_y2() === 0 &&
-                    bedreadySettings.crop_x3() === 0 && bedreadySettings.crop_y3() === 0 &&
-                    bedreadySettings.crop_x4() === 0 && bedreadySettings.crop_y4() === 0) {
+                var currentCropValues = [
+                    bedreadySettings.crop_x1(), bedreadySettings.crop_y1(),
+                    bedreadySettings.crop_x2(), bedreadySettings.crop_y2(),
+                    bedreadySettings.crop_x3(), bedreadySettings.crop_y3(),
+                    bedreadySettings.crop_x4(), bedreadySettings.crop_y4()
+                ].map(function(value) {
+                    return parseInt(value, 10);
+                });
+                var allCropValuesUnset = currentCropValues.every(function(value) {
+                    return isNaN(value) || value === 0;
+                });
+                if (allCropValuesUnset) {
                     // Top-left
                     bedreadySettings.crop_x1(0);
                     bedreadySettings.crop_y1(0);
