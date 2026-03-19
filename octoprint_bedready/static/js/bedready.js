@@ -361,22 +361,50 @@ $(function () {
         };
 
         self.normalizeCropCorners = function(corners) {
-            // Keep corners in consistent TL, TR, BR, BL order to avoid crossing edges.
-            const sortedByY = corners.slice().sort(function(a, b) {
-                if (a.y === b.y) {
-                    return a.x - b.x;
+            // Use convex hull to keep an outer, non-crossing polygon in all perspective cases.
+            const pts = corners.slice().sort(function(a, b) {
+                if (a.x === b.x) {
+                    return a.y - b.y;
                 }
-                return a.y - b.y;
-            });
-
-            const top = sortedByY.slice(0, 2).sort(function(a, b) {
                 return a.x - b.x;
             });
-            const bottom = sortedByY.slice(2, 4).sort(function(a, b) {
-                return b.x - a.x;
+
+            function cross(o, a, b) {
+                return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+            }
+
+            const lower = [];
+            pts.forEach(function(p) {
+                while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+                    lower.pop();
+                }
+                lower.push(p);
             });
 
-            return [top[0], top[1], bottom[0], bottom[1]];
+            const upper = [];
+            for (let i = pts.length - 1; i >= 0; i--) {
+                const p = pts[i];
+                while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+                    upper.pop();
+                }
+                upper.push(p);
+            }
+
+            const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+
+            // With 4 outer points this guarantees a simple non-crossing order.
+            if (hull.length === 4) {
+                return hull;
+            }
+
+            // Fallback for degenerate cases: keep a deterministic, stable cyclic order.
+            const centroid = corners.reduce(function(acc, p) {
+                return {x: acc.x + p.x / 4, y: acc.y + p.y / 4};
+            }, {x: 0, y: 0});
+
+            return corners.slice().sort(function(a, b) {
+                return Math.atan2(a.y - centroid.y, a.x - centroid.x) - Math.atan2(b.y - centroid.y, b.x - centroid.x);
+            });
         };
         
         self.drawCanvas = function() {
