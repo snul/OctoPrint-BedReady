@@ -348,6 +348,36 @@ $(function () {
                  y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4()) || 0}
             ];
         };
+
+        self.setCorners = function(corners) {
+            self.settingsViewModel.settings.plugins.bedready.crop_x1(corners[0].x);
+            self.settingsViewModel.settings.plugins.bedready.crop_y1(corners[0].y);
+            self.settingsViewModel.settings.plugins.bedready.crop_x2(corners[1].x);
+            self.settingsViewModel.settings.plugins.bedready.crop_y2(corners[1].y);
+            self.settingsViewModel.settings.plugins.bedready.crop_x3(corners[2].x);
+            self.settingsViewModel.settings.plugins.bedready.crop_y3(corners[2].y);
+            self.settingsViewModel.settings.plugins.bedready.crop_x4(corners[3].x);
+            self.settingsViewModel.settings.plugins.bedready.crop_y4(corners[3].y);
+        };
+
+        self.normalizeCropCorners = function(corners) {
+            // Keep corners in consistent TL, TR, BR, BL order to avoid crossing edges.
+            const sortedByY = corners.slice().sort(function(a, b) {
+                if (a.y === b.y) {
+                    return a.x - b.x;
+                }
+                return a.y - b.y;
+            });
+
+            const top = sortedByY.slice(0, 2).sort(function(a, b) {
+                return a.x - b.x;
+            });
+            const bottom = sortedByY.slice(2, 4).sort(function(a, b) {
+                return b.x - a.x;
+            });
+
+            return [top[0], top[1], bottom[0], bottom[1]];
+        };
         
         self.drawCanvas = function() {
             if (!self.canvas || !self.img || !self.ctx) return;
@@ -473,26 +503,26 @@ $(function () {
             // Clamp to image boundaries
             const x = Math.max(0, Math.min(self.imageWidth, Math.round(imageX)));
             const y = Math.max(0, Math.min(self.imageHeight, Math.round(imageY)));
-            
-            // Update the specific corner being dragged
-            switch(self.draggedCorner) {
-                case 0:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x1(x);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y1(y);
-                    break;
-                case 1:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x2(x);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y2(y);
-                    break;
-                case 2:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x3(x);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y3(y);
-                    break;
-                case 3:
-                    self.settingsViewModel.settings.plugins.bedready.crop_x4(x);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y4(y);
-                    break;
-            }
+
+            // Update dragged corner, then normalize so corners remain non-crossing.
+            const corners = self.getCorners();
+            corners[self.draggedCorner] = {x: x, y: y};
+            const normalizedCorners = self.normalizeCropCorners(corners);
+
+            // Keep dragging the same physical point after normalization/reindexing.
+            let closestIdx = 0;
+            let minDistance = Number.POSITIVE_INFINITY;
+            normalizedCorners.forEach(function(corner, idx) {
+                const dx = corner.x - x;
+                const dy = corner.y - y;
+                const distance = (dx * dx) + (dy * dy);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIdx = idx;
+                }
+            });
+            self.draggedCorner = closestIdx;
+            self.setCorners(normalizedCorners);
             
             self.drawCanvas();
             event.preventDefault();
@@ -542,15 +572,14 @@ $(function () {
             const y3 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY3) ? 0 : rawY3));
             const x4 = Math.max(0, Math.min(self.imageWidth, isNaN(rawX4) ? 0 : rawX4));
             const y4 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY4) ? 0 : rawY4));
-            
-            self.settingsViewModel.settings.plugins.bedready.crop_x1(x1);
-            self.settingsViewModel.settings.plugins.bedready.crop_y1(y1);
-            self.settingsViewModel.settings.plugins.bedready.crop_x2(x2);
-            self.settingsViewModel.settings.plugins.bedready.crop_y2(y2);
-            self.settingsViewModel.settings.plugins.bedready.crop_x3(x3);
-            self.settingsViewModel.settings.plugins.bedready.crop_y3(y3);
-            self.settingsViewModel.settings.plugins.bedready.crop_x4(x4);
-            self.settingsViewModel.settings.plugins.bedready.crop_y4(y4);
+
+            const normalizedCorners = self.normalizeCropCorners([
+                {x: x1, y: y1},
+                {x: x2, y: y2},
+                {x: x3, y: y3},
+                {x: x4, y: y4}
+            ]);
+            self.setCorners(normalizedCorners);
             
             self.drawCanvas();
         };
