@@ -22,6 +22,19 @@ $(function () {
             return cleanPath;
         };
 
+        // Helper function to escape HTML special characters to prevent XSS
+        self.escapeHtml = function(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+        };
+
         self.reference_images = ko.observableArray([]);
         self.taking_snapshot = ko.observable(false);
         self.debug_images = ko.observableArray([]);
@@ -64,6 +77,12 @@ $(function () {
         self.imageWidth = 0;
         self.imageHeight = 0;
         self.handleSize = 12;
+        
+        // Store event handler references for cleanup
+        self.canvasMouseDownHandler = null;
+        self.canvasMouseMoveHandler = null;
+        self.canvasMouseUpHandler = null;
+        self.canvasMouseLeaveHandler = null;
 
         self.snapshot_valid = ko.pureComputed(function(){
             try {
@@ -108,7 +127,7 @@ $(function () {
                     self.load_debug_images();
                 }
             } else if (data.hasOwnProperty('error')) {
-                self.popup_options.text = 'There was an error: ' + data.error.error;
+                self.popup_options.text = 'There was an error: ' + self.escapeHtml(data.error.error);
                 self.popup_options.type = 'error';
                 self.popup_options.title = 'Bed Ready Error';
                 if (self.popup === undefined) {
@@ -135,7 +154,7 @@ $(function () {
               .fail(function(response) {
                 new PNotify({
                     title: 'Bed Ready Error',
-                    text: 'There was an error deleting the snapshot: ' + response.responseJSON.error,
+                    text: 'There was an error deleting the snapshot: ' + self.escapeHtml(response.responseJSON.error),
                     hide: true
                 });
               });
@@ -155,7 +174,7 @@ $(function () {
                 .fail(function (response) {
                   new PNotify({
                       title: 'Bed Ready Error',
-                      text: 'There was an error saving the snapshot: ' + response.responseJSON.error,
+                      text: 'There was an error saving the snapshot: ' + self.escapeHtml(response.responseJSON.error),
                       hide: true
                   });
                   self.taking_snapshot(false);
@@ -170,7 +189,7 @@ $(function () {
             .fail(function (response) {
               new PNotify({
                   title: 'Bed Ready Error',
-                  text: 'Failed to load snapshots: ' + response.responseJSON.error,
+                  text: 'Failed to load snapshots: ' + self.escapeHtml(response.responseJSON.error),
                   hide: true
               });
             });
@@ -208,9 +227,19 @@ $(function () {
               });
             })
             .fail(function (response) {
+              var errorMessage = 'Unknown error';
+              if (response) {
+                if (response.responseJSON && response.responseJSON.error) {
+                  errorMessage = response.responseJSON.error;
+                } else if (response.error) {
+                  errorMessage = response.error;
+                } else if (response.statusText) {
+                  errorMessage = response.statusText;
+                }
+              }
               new PNotify({
                   title: 'Bed Ready Error',
-                  text: 'There was an error deleting the debug image: ' + response.responseJSON.error,
+                  text: 'There was an error deleting the debug image: ' + errorMessage,
                   hide: true,
                   type: 'error'
               });
@@ -230,19 +259,33 @@ $(function () {
             
             self.ctx = self.canvas.getContext('2d');
             
-            // Add event listeners directly to canvas
-            self.canvas.addEventListener('mousedown', function(e) {
+            // Remove old event listeners if they exist
+            if (self.canvasMouseDownHandler) {
+                self.canvas.removeEventListener('mousedown', self.canvasMouseDownHandler);
+                self.canvas.removeEventListener('mousemove', self.canvasMouseMoveHandler);
+                self.canvas.removeEventListener('mouseup', self.canvasMouseUpHandler);
+                self.canvas.removeEventListener('mouseleave', self.canvasMouseLeaveHandler);
+            }
+            
+            // Create and store event handler functions
+            self.canvasMouseDownHandler = function(e) {
                 self.startCrop(null, e);
-            });
-            self.canvas.addEventListener('mousemove', function(e) {
+            };
+            self.canvasMouseMoveHandler = function(e) {
                 self.moveCrop(null, e);
-            });
-            self.canvas.addEventListener('mouseup', function(e) {
+            };
+            self.canvasMouseUpHandler = function(e) {
                 self.endCrop(null, e);
-            });
-            self.canvas.addEventListener('mouseleave', function(e) {
+            };
+            self.canvasMouseLeaveHandler = function(e) {
                 self.cancelCrop(null, e);
-            });
+            };
+            
+            // Add new event listeners
+            self.canvas.addEventListener('mousedown', self.canvasMouseDownHandler);
+            self.canvas.addEventListener('mousemove', self.canvasMouseMoveHandler);
+            self.canvas.addEventListener('mouseup', self.canvasMouseUpHandler);
+            self.canvas.addEventListener('mouseleave', self.canvasMouseLeaveHandler);
             
             // Get actual image dimensions
             OctoPrint.simpleApiCommand('bedready', 'get_image_dimensions', {
@@ -252,23 +295,35 @@ $(function () {
                 self.imageHeight = response.height;
                 
                 // Initialize crop coordinates if not set (create rectangle covering full image)
-                if (self.settingsViewModel.settings.plugins.bedready.crop_x2() === 0 ||
-                    self.settingsViewModel.settings.plugins.bedready.crop_y2() === 0) {
+                var bedreadySettings = self.settingsViewModel.settings.plugins.bedready;
+                if (bedreadySettings.crop_x1() === 0 && bedreadySettings.crop_y1() === 0 &&
+                    bedreadySettings.crop_x2() === 0 && bedreadySettings.crop_y2() === 0 &&
+                    bedreadySettings.crop_x3() === 0 && bedreadySettings.crop_y3() === 0 &&
+                    bedreadySettings.crop_x4() === 0 && bedreadySettings.crop_y4() === 0) {
                     // Top-left
-                    self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y1(0);
+                    bedreadySettings.crop_x1(0);
+                    bedreadySettings.crop_y1(0);
                     // Top-right
-                    self.settingsViewModel.settings.plugins.bedready.crop_x2(self.imageWidth);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y2(0);
+                    bedreadySettings.crop_x2(self.imageWidth);
+                    bedreadySettings.crop_y2(0);
                     // Bottom-right
-                    self.settingsViewModel.settings.plugins.bedready.crop_x3(self.imageWidth);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y3(self.imageHeight);
+                    bedreadySettings.crop_x3(self.imageWidth);
+                    bedreadySettings.crop_y3(self.imageHeight);
                     // Bottom-left
-                    self.settingsViewModel.settings.plugins.bedready.crop_x4(0);
-                    self.settingsViewModel.settings.plugins.bedready.crop_y4(self.imageHeight);
-                }
+                    bedreadySettings.crop_x4(0);
+                    bedreadySettings.crop_y4(self.imageHeight);
                 
-                self.drawCanvas();
+                self.drawCanvas()
+            }).fail(function(jqXHR, status, error) {
+                // Handle failure to retrieve image dimensions gracefully
+                console.error('Failed to get image dimensions for BedReady reference image:', status, error);
+                self.popup_options.text = 'Unable to load reference image dimensions. The crop editor may not function correctly. Please verify the reference image file.';
+                try {
+                    new PNotify(self.popup_options);
+                } catch (e) {
+                    // Fallback if PNotify is not available
+                    alert(self.popup_options.text);
+                }
             });
         };
         
@@ -287,6 +342,9 @@ $(function () {
         
         self.drawCanvas = function() {
             if (!self.canvas || !self.img || !self.ctx) return;
+            
+            // Ensure image dimensions are loaded and valid
+            if (self.imageWidth <= 0 || self.imageHeight <= 0) return;
             
             // Set canvas size to fit container (max 800px wide)
             const maxWidth = 800;
@@ -453,15 +511,28 @@ $(function () {
         };
         
         self.updateCropFromInputs = function() {
+            // Only update if image dimensions are available
+            if (!self.imageWidth || !self.imageHeight) {
+                return;
+            }
+
             // Validate and constrain values
-            const x1 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0));
-            const y1 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1()) || 0));
-            const x2 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || self.imageWidth));
-            const y2 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || 0));
-            const x3 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3()) || self.imageWidth));
-            const y3 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y3()) || self.imageHeight));
-            const x4 = Math.max(0, Math.min(self.imageWidth, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4()) || 0));
-            const y4 = Math.max(0, Math.min(self.imageHeight, parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4()) || self.imageHeight));
+            const rawX1 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1());
+            const rawY1 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1());
+            const rawX2 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2());
+            const rawY2 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2());
+            const rawX3 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3());
+            const rawY3 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y3());
+            const rawX4 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4());
+            const rawY4 = parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4());
+            const x1 = Math.max(0, Math.min(self.imageWidth, isNaN(rawX1) ? 0 : rawX1));
+            const y1 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY1) ? 0 : rawY1));
+            const x2 = Math.max(0, Math.min(self.imageWidth, isNaN(rawX2) ? 0 : rawX2));
+            const y2 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY2) ? 0 : rawY2));
+            const x3 = Math.max(0, Math.min(self.imageWidth, isNaN(rawX3) ? 0 : rawX3));
+            const y3 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY3) ? 0 : rawY3));
+            const x4 = Math.max(0, Math.min(self.imageWidth, isNaN(rawX4) ? 0 : rawX4));
+            const y4 = Math.max(0, Math.min(self.imageHeight, isNaN(rawY4) ? 0 : rawY4));
             
             self.settingsViewModel.settings.plugins.bedready.crop_x1(x1);
             self.settingsViewModel.settings.plugins.bedready.crop_y1(y1);
@@ -493,7 +564,17 @@ $(function () {
 
         self.test_snapshot = function () {
             self.taking_snapshot(true);
-            OctoPrint.simpleApiCommand('bedready', 'check_bed', {reference: self.settingsViewModel.settings.plugins.bedready.reference_image()})
+            OctoPrint.simpleApiCommand('bedready', 'check_bed', {
+                reference: self.settingsViewModel.settings.plugins.bedready.reference_image(),
+                crop_x1: self.settingsViewModel.settings.plugins.bedready.crop_x1(),
+                crop_y1: self.settingsViewModel.settings.plugins.bedready.crop_y1(),
+                crop_x2: self.settingsViewModel.settings.plugins.bedready.crop_x2(),
+                crop_y2: self.settingsViewModel.settings.plugins.bedready.crop_y2(),
+                crop_x3: self.settingsViewModel.settings.plugins.bedready.crop_x3(),
+                crop_y3: self.settingsViewModel.settings.plugins.bedready.crop_y3(),
+                crop_x4: self.settingsViewModel.settings.plugins.bedready.crop_x4(),
+                crop_y4: self.settingsViewModel.settings.plugins.bedready.crop_y4()
+            })
                 .done(function (response) {
                     const similarity_pct = (parseFloat(response.similarity) * 100).toFixed(2);
                     const timestamp = new Date().getTime();

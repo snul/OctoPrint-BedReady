@@ -47,16 +47,6 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             clean_path = clean_path[len(prefix):]
         return clean_path
 
-    def on_after_startup(self):
-        """Migrate old image paths on startup for backwards compatibility."""
-        reference_image = self._settings.get(["reference_image"])
-        if reference_image:
-            normalized = self.normalize_image_path(reference_image)
-            if normalized != reference_image:
-                self._logger.info(f"Migrating reference_image from '{reference_image}' to '{normalized}'")
-                self._settings.set(["reference_image"], normalized)
-                self._settings.save()
-
     # ~~ EventHandlerPlugin mixin
 
     def on_event(self, event, payload):
@@ -103,20 +93,28 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 # Extract timestamp and threshold from filename
                 parts = f.replace(DEBUG_IMAGE_PREFIX, '').replace('.jpg', '').split('_')
-                if len(parts) >= 4:
+                # Expect at least date, time, and one threshold component
+                if len(parts) >= 3:
                     date_part = parts[0]
                     time_part = parts[1]
-                    # Reconstruct threshold from parts[2] and parts[3] (e.g., "0" and "9842" -> 0.9842)
-                    threshold = float(f"{parts[2]}.{parts[3]}")
+                    # Reconstruct threshold from remaining parts.
+                    # Example:
+                    #   ["YYYYMMDD", "HHMMSS", "0", "9842"]       -> "0.9842"
+                    #   ["YYYYMMDD", "HHMMSS", "0", "9842", "0"]  -> "0.98420"
+                    if len(parts) > 3:
+                        threshold_str = f"{parts[2]}.{''.join(parts[3:])}"
+                    else:
+                        threshold_str = parts[2]
+                    threshold = float(threshold_str)
                     timestamp = f"{date_part}_{time_part}"
                     debug_info.append({
                         'filename': f,
                         'timestamp': timestamp,
                         'threshold': threshold
                     })
-            except:
-                # Skip files that don't match expected format
-                pass
+            except Exception as e:
+                # Skip files that don't match expected format, but log at debug level for troubleshooting
+                self._logger.debug("Skipping debug image with unexpected format '%s': %s", f, e)
         
         return debug_info
     
@@ -158,17 +156,33 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             return flask.jsonify(self.get_snapshots())
         elif command == "check_bed":
             try:
-                result = self.check_bed(data.get("reference"), data.get("similarity"))
+                # Extract crop coordinates from request if provided (for live preview testing)
+                crop_coords = {
+                    'crop_x1': data.get("crop_x1"),
+                    'crop_y1': data.get("crop_y1"),
+                    'crop_x2': data.get("crop_x2"),
+                    'crop_y2': data.get("crop_y2"),
+                    'crop_x3': data.get("crop_x3"),
+                    'crop_y3': data.get("crop_y3"),
+                    'crop_x4': data.get("crop_x4"),
+                    'crop_y4': data.get("crop_y4"),
+                }
+                result = self.check_bed(data.get("reference"), data.get("similarity"), crop_coords=crop_coords)
                 return flask.jsonify(result)
             except Exception as e:
                 return flask.jsonify(dict(error=str(e)))
         elif command == "list_snapshots":
             return flask.jsonify(self.get_snapshots())
         elif command == "delete_snapshot":
-            p = Path(self.get_plugin_data_folder()) / data.get("filename")
-            if not p.relative_to(self.get_plugin_data_folder()):
+            filename = data.get("filename")
+            if not filename:
+                raise ValueError("Filename is required")
+            p = Path(self.get_plugin_data_folder()) / filename
+            try:
+                p.relative_to(self.get_plugin_data_folder())
+            except ValueError:
                 raise ValueError("Path is outside of plugin data folder")
-            elif not p.exists() or not p.is_file():
+            if not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
             p.unlink()
             return flask.jsonify(self.get_snapshots())
@@ -176,10 +190,21 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 import cv2
                 filename = data.get("filename")
+                if not filename:
+                    return flask.jsonify(dict(error="Filename is required"))
                 # Normalize path for backwards compatibility
                 filename = self.normalize_image_path(filename)
-                image_path = os.path.join(self.get_plugin_data_folder(), filename)
-                img = cv2.imread(image_path)
+                base_path = Path(self.get_plugin_data_folder())
+                image_path = base_path / filename
+                try:
+                    # Ensure the path is within the plugin data folder
+                    image_path.relative_to(base_path)
+                except ValueError:
+                    return flask.jsonify(dict(error="Path is outside of plugin data folder"))
+                if not image_path.exists() or not image_path.is_file():
+                    return flask.jsonify(dict(error="Path is not a file"))
+                img = cv2.imread(str(image_path))
+
                 if img is None:
                     return flask.jsonify(dict(error="Unable to read image"))
                 height, width = img.shape[:2]
@@ -189,12 +214,17 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         elif command == "list_debug_images":
             return flask.jsonify(self.get_debug_images())
         elif command == "delete_debug_image":
-            p = Path(self.get_plugin_data_folder()) / data.get("filename")
-            if not p.relative_to(self.get_plugin_data_folder()):
+            filename = data.get("filename")
+            if not filename:
+                raise ValueError("Filename is required")
+            p = Path(self.get_plugin_data_folder()) / filename
+            try:
+                p.relative_to(self.get_plugin_data_folder())
+            except ValueError:
                 raise ValueError("Path is outside of plugin data folder")
-            elif not p.exists() or not p.is_file():
+            if not p.exists() or not p.is_file():
                 raise ValueError("Path is not a file")
-            elif not p.name.startswith(DEBUG_IMAGE_PREFIX):
+            if not p.name.startswith(DEBUG_IMAGE_PREFIX):
                 raise ValueError("Can only delete debug images")
             p.unlink()
             return flask.jsonify(self.get_debug_images())
@@ -234,6 +264,21 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             "debug_mode": False
         }
 
+    def get_settings_version(self):
+        return 1
+
+    def on_settings_migrate(self, target, current=None):
+        """Migrate settings to newer versions, including path normalization for backwards compatibility."""
+        if current is not None:
+            # Migrate old image paths from versions before path normalization (version 0 -> 1)
+            if current < 1:
+                reference_image = self._settings.get(["reference_image"])
+                if reference_image:
+                    normalized = self.normalize_image_path(reference_image)
+                    if normalized != reference_image:
+                        self._logger.info(f"Migrating reference_image from '{reference_image}' to '{normalized}'")
+                        self._settings.set(["reference_image"], normalized)
+
     def on_settings_load(self):
         """Load settings and normalize any old image paths."""
         data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
@@ -271,40 +316,66 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                                                              lambda path: not is_hidden_path(path), status_code=404)))
         ]
 
-    def compare_images(self, reference_image, comparison_image):
+    def compare_images(self, reference_image, comparison_image, crop_coords=None):
         import cv2
         import numpy as np
         reference_image = cv2.imread(reference_image)
         comparison_image = cv2.imread(comparison_image)
+        if reference_image is None or comparison_image is None:
+            raise ValueError("Failed to load reference or comparison image for comparison.")
         
-        # Get crop coordinates from settings (4 corners)
-        x1 = self._settings.get_int(["crop_x1"])
-        y1 = self._settings.get_int(["crop_y1"])
-        x2 = self._settings.get_int(["crop_x2"])
-        y2 = self._settings.get_int(["crop_y2"])
-        x3 = self._settings.get_int(["crop_x3"])
-        y3 = self._settings.get_int(["crop_y3"])
-        x4 = self._settings.get_int(["crop_x4"])
-        y4 = self._settings.get_int(["crop_y4"])
+        # Get crop coordinates from provided parameter or fall back to settings
+        if crop_coords and any(crop_coords.values()):
+            x1 = crop_coords.get('crop_x1', 0) or 0
+            y1 = crop_coords.get('crop_y1', 0) or 0
+            x2 = crop_coords.get('crop_x2', 0) or 0
+            y2 = crop_coords.get('crop_y2', 0) or 0
+            x3 = crop_coords.get('crop_x3', 0) or 0
+            y3 = crop_coords.get('crop_y3', 0) or 0
+            x4 = crop_coords.get('crop_x4', 0) or 0
+            y4 = crop_coords.get('crop_y4', 0) or 0
+        else:
+            x1 = self._settings.get_int(["crop_x1"])
+            y1 = self._settings.get_int(["crop_y1"])
+            x2 = self._settings.get_int(["crop_x2"])
+            y2 = self._settings.get_int(["crop_y2"])
+            x3 = self._settings.get_int(["crop_x3"])
+            y3 = self._settings.get_int(["crop_y3"])
+            x4 = self._settings.get_int(["crop_x4"])
+            y4 = self._settings.get_int(["crop_y4"])
         
         # Apply perspective transform if coordinates are set
-        if x2 > 0 and y2 > 0 and x3 > 0 and y3 > 0:
+        if all(coord > 0 for coord in (x1, y1, x2, y2, x3, y3, x4, y4)):
             # Define source points (the quadrilateral in the image)
             src_pts = np.float32([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
             
+            # Validate that the quadrilateral is non-degenerate (non-zero area)
+            x_coords = src_pts[:, 0]
+            y_coords = src_pts[:, 1]
+            area = 0.5 * abs(
+                np.dot(x_coords, np.roll(y_coords, -1))
+                - np.dot(y_coords, np.roll(x_coords, -1))
+            )
             # Calculate destination rectangle size (bounding box of the quadrilateral)
             width = int(max(np.linalg.norm(src_pts[0] - src_pts[1]), np.linalg.norm(src_pts[2] - src_pts[3])))
             height = int(max(np.linalg.norm(src_pts[1] - src_pts[2]), np.linalg.norm(src_pts[3] - src_pts[0])))
-            
-            # Define destination points (rectangular output)
-            dst_pts = np.float32([[0, 0], [width, 0], [width, height], [0, height]])
-            
-            # Get perspective transform matrix
-            matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
-            
-            # Apply transform to both images
-            reference_image = cv2.warpPerspective(reference_image, matrix, (width, height))
-            comparison_image = cv2.warpPerspective(comparison_image, matrix, (width, height))
+            # Check for valid geometry and positive dimensions before applying transform
+            if area <= 1e-3 or width <= 0 or height <= 0:
+                self._logger.warning(
+                    "Invalid crop coordinates for perspective transform; skipping transform "
+                    "(area=%s, width=%s, height=%s)", area, width, height
+                )
+            else:
+                # Define destination points (rectangular output)
+                dst_pts = np.float32([[0, 0], [width, 0], [width, height], [0, height]])
+                try:
+                    # Get perspective transform matrix
+                    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
+                    # Apply transform to both images
+                    reference_image = cv2.warpPerspective(reference_image, matrix, (width, height))
+                    comparison_image = cv2.warpPerspective(comparison_image, matrix, (width, height))
+                except cv2.error as e:
+                    self._logger.error("Error applying perspective transform: %s", e)
         
         height, width, channels = reference_image.shape
         pixel_difference = cv2.norm(reference_image, comparison_image, cv2.NORM_L2)
@@ -356,7 +427,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                 except Exception as e:
                     self._logger.info(e)
 
-    def check_bed(self, reference=None, match_percentage=None, store_debug=False):
+    def check_bed(self, reference=None, match_percentage=None, store_debug=False, crop_coords=None):
         if reference == None:
             reference = self._settings.get(["reference_image"])
         
@@ -371,7 +442,8 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             self.take_snapshot(COMPARISON_FILENAME)
             similarity = self.compare_images(
                 os.path.join(self.get_plugin_data_folder(), reference),
-                os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME))
+                os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME),
+                crop_coords=crop_coords)
             
             # Store debug image if requested (from @BEDREADY command, not manual test)
             if store_debug:
