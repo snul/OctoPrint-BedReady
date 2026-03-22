@@ -269,7 +269,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
 
     def on_settings_migrate(self, target, current=None):
         """Migrate settings to newer versions, including path normalization for backwards compatibility."""
-        if current is not None:
+        if current is None or current < 1:
             # Migrate old image paths from versions before path normalization (version 0 -> 1)
             if current < 1:
                 reference_image = self._settings.get(["reference_image"])
