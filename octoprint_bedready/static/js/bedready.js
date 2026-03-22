@@ -22,19 +22,6 @@ $(function () {
             return cleanPath;
         };
 
-        // Helper function to escape HTML special characters to prevent XSS
-        self.escapeHtml = function(text) {
-            if (!text) return '';
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
-        };
-
         self.reference_images = ko.observableArray([]);
         self.taking_snapshot = ko.observable(false);
         self.debug_images = ko.observableArray([]);
@@ -127,7 +114,7 @@ $(function () {
                     self.load_debug_images();
                 }
             } else if (data.hasOwnProperty('error')) {
-                self.popup_options.text = 'There was an error: ' + self.escapeHtml(data.error.error);
+                self.popup_options.text = 'There was an error: ' + _.escape(data.error.error);
                 self.popup_options.type = 'error';
                 self.popup_options.title = 'Bed Ready Error';
                 if (self.popup === undefined) {
@@ -154,7 +141,7 @@ $(function () {
               .fail(function(response) {
                 new PNotify({
                     title: 'Bed Ready Error',
-                    text: 'There was an error deleting the snapshot: ' + self.escapeHtml(response.responseJSON.error),
+                    text: 'There was an error deleting the snapshot: ' + _.escape(response.responseJSON.error),
                     hide: true
                 });
               });
@@ -174,7 +161,7 @@ $(function () {
                 .fail(function (response) {
                   new PNotify({
                       title: 'Bed Ready Error',
-                      text: 'There was an error saving the snapshot: ' + self.escapeHtml(response.responseJSON.error),
+                      text: 'There was an error saving the snapshot: ' + _.escape(response.responseJSON.error),
                       hide: true
                   });
                   self.taking_snapshot(false);
@@ -189,7 +176,7 @@ $(function () {
             .fail(function (response) {
               new PNotify({
                   title: 'Bed Ready Error',
-                  text: 'Failed to load snapshots: ' + self.escapeHtml(response.responseJSON.error),
+                  text: 'Failed to load snapshots: ' + _.escape(response.responseJSON.error),
                   hide: true
               });
             });
