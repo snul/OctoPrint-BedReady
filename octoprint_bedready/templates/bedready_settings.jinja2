@@ -118,7 +118,7 @@
                 <img alt="debug comparison" data-bind="attr: {src: 'plugin/bedready/images/' + filename}" style="max-width: 100px; cursor: pointer;">
               </a>
             </td>
-            <td data-bind="text: timestamp.replace(/_/, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></td>
+            <td data-bind="text: timestamp.replace(/^(\d{8})_(\d{6})$/, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></td>
             <td>
               <span data-bind="text: (threshold * 100).toFixed(2) + '%'"></span>
             </td>
@@ -142,7 +142,7 @@
   </div>
   <div class="modal-body" style="text-align: center;">
     <div data-bind="with: selected_debug_image">
-      <p><strong>{{ _('Timestamp:') }}</strong> <span data-bind="text: timestamp.replace(/_/, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></span></p>
+      <p><strong>{{ _('Timestamp:') }}</strong> <span data-bind="text: timestamp.replace(/_/g, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></span></p>
       <p><strong>{{ _('Similarity:') }}</strong> <span data-bind="text: (threshold * 100).toFixed(2) + '%'"></span></p>
       <img alt="debug comparison" data-bind="attr: {src: 'plugin/bedready/images/' + filename}" style="max-width: 100%; height: auto;">
     </div>
