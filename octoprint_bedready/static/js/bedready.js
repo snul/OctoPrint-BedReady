@@ -226,7 +226,7 @@ $(function () {
               }
               new PNotify({
                   title: 'Bed Ready Error',
-                  text: 'There was an error deleting the debug image: ' + errorMessage,
+                  text: 'There was an error deleting the debug image: ' + _.escape(errorMessage),
                   hide: true,
                   type: 'error'
               });
