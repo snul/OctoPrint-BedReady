@@ -71,14 +71,21 @@ $(function () {
         self.canvasMouseUpHandler = null;
         self.canvasMouseLeaveHandler = null;
 
+        self.snapshot_status_valid = ko.observable(false);
+
         self.snapshot_valid = ko.pureComputed(function(){
-            try {
-                var url = self.settingsViewModel.webcam_snapshotUrl();
-                return !!(url && url.length > 0 && url.startsWith('http'));
-            } catch(e) {
-                return false;
-            }
+            return self.snapshot_status_valid();
         });
+
+        self.refresh_snapshot_status = function() {
+            return OctoPrint.simpleApiCommand('bedready', 'snapshot_status')
+                .done(function(response) {
+                    self.snapshot_status_valid(!!(response && response.valid));
+                })
+                .fail(function() {
+                    self.snapshot_status_valid(false);
+                });
+        };
 
         self.onDataUpdaterPluginMessage = function (plugin, data) {
             if (plugin !== 'bedready') {
@@ -182,6 +189,7 @@ $(function () {
             });
         }
         self.load_snapshots();
+        self.refresh_snapshot_status();
 
         // Debug images functions
         self.load_debug_images = function() {
@@ -235,7 +243,8 @@ $(function () {
 
         // Load debug images when settings are shown
         self.onSettingsShown = function() {
-          self.load_debug_images();
+            self.refresh_snapshot_status();
+            self.load_debug_images();
         };
 
         // Crop editor functions
