@@ -2,7 +2,7 @@
 <div class="row-fluid">
     <div class="well well-info"><p>For the plugin to work properly add <span class="label label-info">@BEDREADY</span> at the beginning of your slicer's start gcode. For best results add gcode to your slicer's end gcode to position the head out of the way for the next comparison.</p><p><span class="label label-important">NOTE:</span> Lighting, camera view angle changes, and filament color that is similar to the bed can impact accuracy; adjust the Match Percentage setting below to compensate.</p></div>
 </div>
-<div class="well alert-danger" data-bind="visible: !snapshot_valid()"><p>Invalid Snapshot URL configured in <a href="javascript:void(0)" data-bind="click: function(){ settingsViewModel.show('#settings_webcam'); }">Webcam & Timelapse</a> settings. That setting must be configured with a full url for this plugin (as well as timelapse) to function properly.</p></div>
+<div class="well alert-danger" data-bind="visible: !snapshot_valid()"><p>No valid webcam snapshot URL is configured in <a href="javascript:void(0)" data-bind="click: function(){ settingsViewModel.show('#settings_webcam'); }">Webcam</a> settings. Configure a webcam with a valid snapshot URL for this plugin to function properly.</p></div>
 
 <form class="form-vertical" id="settings_plugin_bedready_form" data-bind="visible: snapshot_valid()">
   <h3>{{ _('Reference Image') }}</h3>
@@ -118,7 +118,7 @@
                 <img alt="debug comparison" data-bind="attr: {src: 'plugin/bedready/images/' + filename}" style="max-width: 100px; cursor: pointer;">
               </a>
             </td>
-            <td data-bind="text: timestamp.replace(/^(\d{8})_(\d{6})$/, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></td>
+            <td data-bind="text: timestamp.replace(/_/g, ' ').replace(/(\d{4})(\d{2})(\d{2})\s(\d{2})(\d{2})(\d{2})/, '$1-$2-$3 $4:$5:$6')"></td>
             <td>
               <span data-bind="text: (threshold * 100).toFixed(2) + '%'"></span>
             </td>
