@@ -78,7 +78,7 @@
         <button class="btn btn-primary" data-bind="click: function() { $root.set_default_snapshot($data); }, disable: $data === $root.settingsViewModel.settings.plugins.bedready.reference_image()">Set as Reference</button>
         </p>
         <p>
-        <button class="btn" data-bind="click: function() { $root.delete_snapshot($data); }">Delete</button>
+        <button class="btn" data-bind="click: function() { $root.delete_snapshot($data); }, disable: $data === $root.settingsViewModel.settings.plugins.bedready.reference_image()">Delete</button>
         </p>
       </td>
     </tr>
