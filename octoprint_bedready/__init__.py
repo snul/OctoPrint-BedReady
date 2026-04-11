@@ -8,6 +8,7 @@ import os
 import datetime
 from pathlib import Path
 from octoprint.events import Events
+from octoprint.util.files import sanitize_filename
 
 TEST_FILENAME = "test.jpg"
 COMPARISON_FILENAME = "comparison.jpg"
@@ -109,23 +110,23 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         return True
 
     def get_snapshots(self):
-        return [f for f in os.listdir(self.get_plugin_data_folder()) 
+        return [f for f in os.listdir(self.get_plugin_data_folder())
                 if os.path.isfile(os.path.join(self.get_plugin_data_folder(), f))
                 and os.path.splitext(f)[1] == '.jpg'
                 and not f in (TEST_FILENAME, COMPARISON_FILENAME)
                 and not f.startswith(DEBUG_IMAGE_PREFIX)
             ]
-    
+
     def get_debug_images(self):
         """Get list of debug comparison images with their metadata."""
         debug_files = [f for f in os.listdir(self.get_plugin_data_folder())
                       if os.path.isfile(os.path.join(self.get_plugin_data_folder(), f))
                       and f.startswith(DEBUG_IMAGE_PREFIX)
                       and os.path.splitext(f)[1] == '.jpg']
-        
+
         # Sort by timestamp (newest first)
         debug_files.sort(reverse=True)
-        
+
         # Parse metadata from filenames: debug_comparison_YYYYMMDD_HHMMSS_threshold.jpg
         debug_info = []
         for f in debug_files:
@@ -154,25 +155,25 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             except Exception as e:
                 # Skip files that don't match expected format, but log at debug level for troubleshooting
                 self._logger.debug("Skipping debug image with unexpected format '%s': %s", f, e)
-        
+
         return debug_info
-    
+
     def store_debug_image(self, comparison_image_path, threshold):
         """Store a debug comparison image with threshold in filename."""
         if not self._settings.get_boolean(["debug_mode"]):
             return
-        
+
         # Create filename with timestamp and threshold
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         # Format threshold to 4 decimal places, replacing . with underscore for filename
         threshold_str = f"{threshold:.4f}".replace('.', '_')
         debug_filename = f"{DEBUG_IMAGE_PREFIX}{timestamp}_{threshold_str}.jpg"
         debug_path = os.path.join(self.get_plugin_data_folder(), debug_filename)
-        
+
         # Copy the comparison image
         import shutil
         shutil.copy2(comparison_image_path, debug_path)
-        
+
         # Clean up old debug images (keep only last MAX_DEBUG_IMAGES)
         debug_images = self.get_debug_images()
         if len(debug_images) > MAX_DEBUG_IMAGES:
@@ -189,7 +190,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         import flask
         if command == "take_snapshot":
             try:
-                self.take_snapshot(data.get("name"))
+                self.take_snapshot(sanitize_filename(data.get("name")))
             except Exception as e:
                 return flask.jsonify(dict(error=str(e)))
             return flask.jsonify(self.get_snapshots())
@@ -370,7 +371,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         comparison_image = cv2.imread(comparison_image)
         if reference_image is None or comparison_image is None:
             raise ValueError("Failed to load reference or comparison image for comparison.")
-        
+
         # Get crop coordinates from provided parameter or fall back to settings
         if crop_coords and any(crop_coords.values()):
             x1 = crop_coords.get('crop_x1', 0) or 0
@@ -390,12 +391,12 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             y3 = self._settings.get_int(["crop_y3"])
             x4 = self._settings.get_int(["crop_x4"])
             y4 = self._settings.get_int(["crop_y4"])
-        
+
         # Apply perspective transform if coordinates are set
         if all(coord > 0 for coord in (x1, y1, x2, y2, x3, y3, x4, y4)):
             # Define source points (the quadrilateral in the image)
             src_pts = np.float32([[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
-            
+
             # Validate that the quadrilateral is non-degenerate (non-zero area)
             x_coords = src_pts[:, 0]
             y_coords = src_pts[:, 1]
@@ -423,7 +424,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                     comparison_image = cv2.warpPerspective(comparison_image, matrix, (width, height))
                 except cv2.error as e:
                     self._logger.error("Error applying perspective transform: %s", e)
-        
+
         height, width, channels = reference_image.shape
         pixel_difference = cv2.norm(reference_image, comparison_image, cv2.NORM_L2)
         return 1 - pixel_difference / (height * width)
@@ -434,7 +435,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
         if command.upper() == "BEDREADY_CAPTURE":
             # Take snapshot and set as reference image
             filename = REFERENCE_FILENAME
-            
+
             try:
                 self.take_snapshot(filename)
                 self._settings.set(["reference_image"], filename)
@@ -451,7 +452,7 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                     "error": str(e)
                 })
             return
-        
+
         if command.upper() == "BEDREADY":
             reference = None
             match_percentage = None
@@ -477,21 +478,21 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def check_bed(self, reference=None, match_percentage=None, store_debug=False, crop_coords=None):
         if reference == None:
             reference = self._settings.get(["reference_image"])
-        
+
         # Normalize the reference image path for backwards compatibility
         reference = self.normalize_image_path(reference)
-        
+
         if match_percentage == None:
             match_percentage = self._settings.get_float(["match_percentage"])
 
         self._logger.info(f"check_bed with reference {reference} (threshold {match_percentage})")
-        try: 
+        try:
             self.take_snapshot(COMPARISON_FILENAME)
             similarity = self.compare_images(
                 os.path.join(self.get_plugin_data_folder(), reference),
                 os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME),
                 crop_coords=crop_coords)
-            
+
             # Store debug image if requested (from @BEDREADY command, not manual test)
             if store_debug:
                 comparison_path = os.path.join(self.get_plugin_data_folder(), COMPARISON_FILENAME)
