@@ -2,7 +2,7 @@
 <div class="row-fluid">
     <div class="well well-info"><p>For the plugin to work properly add <span class="label label-info">@BEDREADY</span> at the beginning of your slicer's start gcode. For best results add gcode to your slicer's end gcode to position the head out of the way for the next comparison.</p><p><span class="label label-important">NOTE:</span> Lighting, camera view angle changes, and filament color that is similar to the bed can impact accuracy; adjust the Match Percentage setting below to compensate.</p></div>
 </div>
-<div class="well alert-danger" data-bind="visible: !snapshot_valid()"><p>No valid webcam snapshot URL is configured in <a href="javascript:void(0)" data-bind="click: function(){ settingsViewModel.show('#settings_webcam'); }">Webcam</a> settings. Configure a webcam with a valid snapshot URL for this plugin to function properly.</p></div>
+<div class="well alert-danger" data-bind="visible: !snapshot_valid()"><p>A valid webcam snapshot URL is not configured in <a href="javascript:void(0)" data-bind="click: function(){ settingsViewModel.show('#settings_webcam'); }">Webcam</a> settings. Configure a webcam with a valid snapshot URL for this plugin to function properly.</p></div>
 
 <form class="form-vertical" id="settings_plugin_bedready_form" data-bind="visible: snapshot_valid()">
   <h3>{{ _('Reference Image') }}</h3>
@@ -10,10 +10,10 @@
     <div class="controls">
       <div class="bedready-crop-container" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0">
         <canvas id="bedready-crop-canvas"></canvas>
-        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + normalized_reference_image()}, event: {load: imageLoaded}" style="display:none;">
+        <img id="bedready-reference-image" src="" alt="bed snapshot" data-bind="attr: {src: get_image_url()}, event: {load: imageLoaded}" style="display:none;">
       </div>
       <p>
-        <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button> 
+        <button class="btn btn-primary" data-bind="click: take_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Take Snapshot') }}</button>
         <button class="btn btn-primary" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, click: test_snapshot, enable: !taking_snapshot(), css: {disabled: taking_snapshot()}"><i class="fas" data-bind="css: {'fa-spinner fa-spin': taking_snapshot(), 'fa-camera': !taking_snapshot()}"></i> {{ _('Test Reference') }}</button>
         <button class="btn" data-bind="visible: settingsViewModel.settings.plugins.bedready.reference_image().length > 0, click: resetCrop">{{ _('Reset Crop Area') }}</button>
       </p>
@@ -70,7 +70,7 @@
     <tbody data-bind="foreach: reference_images">
     <tr>
     <td>
-      <img alt="bed snapshot" data-bind="attr: {src: 'plugin/bedready/images/' + $root.normalizeImagePath($data)}" style="max-width: 100px">
+      <img alt="bed snapshot" data-bind="attr: {src: $root.get_image_url($data)}" style="max-width: 100px">
       </td>
       <td data-bind="text: $data"></td>
       <td>

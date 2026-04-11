@@ -8,26 +8,12 @@ $(function () {
     function BedreadyViewModel(parameters) {
         var self = this;
 
-        // Helper function to normalize image paths for backwards compatibility
-        // Removes the 'plugin/bedready/images/' prefix if it exists (from older versions)
-        self.normalizeImagePath = function(path) {
-            if (!path) return '';
-            // Remove leading slash if present
-            let cleanPath = path.startsWith('/') ? path.substring(1) : path;
-            const prefix = 'plugin/bedready/images/';
-            // Remove the prefix if it exists
-            if (cleanPath.startsWith(prefix)) {
-                cleanPath = cleanPath.substring(prefix.length);
-            }
-            return cleanPath;
-        };
-
         self.reference_images = ko.observableArray([]);
         self.taking_snapshot = ko.observable(false);
         self.debug_images = ko.observableArray([]);
         self.selected_debug_image = ko.observable(null);
         self.popup_options = {
-            title: 'Bed Not Ready',
+            title: 'Bed Ready Plugin',
             text: '',
             hide: false,
             type: 'error',
@@ -39,21 +25,19 @@ $(function () {
 
         self.settingsViewModel = parameters[0];
         self.controlViewModel = parameters[1];
-        
-        // Create a computed observable for the normalized reference image path
-        // Must be pureComputed (lazy) so it doesn't evaluate before settings.plugins is available
-        self.normalized_reference_image = ko.pureComputed(function() {
-            if (!self.settingsViewModel.settings || !self.settingsViewModel.settings.plugins) {
-                return '';
+
+        self.get_image_url = function(data) {
+            if(typeof(data) === 'undefined') {
+                if (self.settingsViewModel.settings.plugins.bedready.reference_image() === "") {
+                    return '';
+                } else {
+                    return 'plugin/bedready/images/' + self.settingsViewModel.settings.plugins.bedready.reference_image();
+                }
+            } else {
+                return 'plugin/bedready/images/' + data;
             }
-            var original = self.settingsViewModel.settings.plugins.bedready.reference_image();
-            var normalized = self.normalizeImagePath(original);
-            if (original !== normalized) {
-                console.log('[BedReady] Normalized reference_image from "' + original + '" to "' + normalized + '"');
-            }
-            return normalized;
-        });
-        
+        };
+
         // Crop editor variables
         self.canvas = null;
         self.ctx = null;
@@ -64,7 +48,7 @@ $(function () {
         self.imageWidth = 0;
         self.imageHeight = 0;
         self.handleSize = 12;
-        
+
         // Store event handler references for cleanup
         self.canvasMouseDownHandler = null;
         self.canvasMouseMoveHandler = null;
@@ -87,28 +71,47 @@ $(function () {
                 });
         };
 
+        self.show_similarity = function(data, title) {
+            const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
+            const timestamp = new Date().getTime();
+            // Use unique image urls to prevent issues with browser caching
+            const reference_url = self.get_image_url(data.reference_image) + '?t=' + timestamp;
+            const test_url = self.get_image_url(data.test_image) + '?t=' + timestamp;
+            if(!data.bed_clear) {
+                self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p><p>Print job has been paused, check the bed and then resume.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
+            } else {
+                self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
+            }
+            if (parseFloat(data.similarity) < parseFloat(self.settingsViewModel.settings.plugins.bedready.match_percentage())) {
+                self.popup_options.type = 'error';
+            } else {
+                self.popup_options.type = 'success';
+            }
+            if(title) {
+                self.popup_options.title = title;
+            } else {
+                self.popup_options.title = 'Bed Not Ready';
+            }
+
+            if (self.popup === undefined) {
+                self.popup = PNotify.singleButtonNotify(self.popup_options);
+            } else {
+                self.popup.update(self.popup_options);
+                if (self.popup.state === 'closed'){
+                    self.popup.open();
+                }
+            }
+        };
+
         self.onDataUpdaterPluginMessage = function (plugin, data) {
             if (plugin !== 'bedready') {
                 return;
             }
 
             if (data.hasOwnProperty('similarity') && !data.bed_clear) {
-                const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
-                const timestamp = new Date().getTime();
-                // Use unique image urls to prevent issues with browser caching
-                const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(data.reference_image) + '?t=' + timestamp;
-                const test_url = 'plugin/bedready/images/' + data.test_image + '?t=' + timestamp;
-                self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p><p>Print job has been paused, check the bed and then resume.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
-                self.popup_options.type = 'error';
-                self.popup_options.title = 'Bed Not Ready';
-                if (self.popup === undefined) {
-                    self.popup = PNotify.singleButtonNotify(self.popup_options);
-                } else {
-                    self.popup.update(self.popup_options);
-                    if (self.popup.state === 'closed'){
-                        self.popup.open();
-                    }
-                }
+                data["title"] = 'Bed Ready Test';
+                self.show_similarity(data);
+
                 // Reload debug images if debug mode is enabled
                 if (self.settingsViewModel.settings.plugins.bedready.debug_mode()) {
                     self.load_debug_images();
@@ -252,9 +255,9 @@ $(function () {
             self.img = document.getElementById('bedready-reference-image');
             self.canvas = document.getElementById('bedready-crop-canvas');
             if (!self.canvas || !self.img) return;
-            
+
             self.ctx = self.canvas.getContext('2d');
-            
+
             // Remove old event listeners if they exist
             if (self.canvasMouseDownHandler) {
                 self.canvas.removeEventListener('mousedown', self.canvasMouseDownHandler);
@@ -262,7 +265,7 @@ $(function () {
                 self.canvas.removeEventListener('mouseup', self.canvasMouseUpHandler);
                 self.canvas.removeEventListener('mouseleave', self.canvasMouseLeaveHandler);
             }
-            
+
             // Create and store event handler functions
             self.canvasMouseDownHandler = function(e) {
                 self.startCrop(null, e);
@@ -276,20 +279,20 @@ $(function () {
             self.canvasMouseLeaveHandler = function(e) {
                 self.cancelCrop(null, e);
             };
-            
+
             // Add new event listeners
             self.canvas.addEventListener('mousedown', self.canvasMouseDownHandler);
             self.canvas.addEventListener('mousemove', self.canvasMouseMoveHandler);
             self.canvas.addEventListener('mouseup', self.canvasMouseUpHandler);
             self.canvas.addEventListener('mouseleave', self.canvasMouseLeaveHandler);
-            
+
             // Get actual image dimensions
             OctoPrint.simpleApiCommand('bedready', 'get_image_dimensions', {
                 filename: self.settingsViewModel.settings.plugins.bedready.reference_image()
             }).done(function(response) {
                 self.imageWidth = response.width;
                 self.imageHeight = response.height;
-                
+
                 // Initialize crop coordinates if not set (create rectangle covering full image)
                 var bedreadySettings = self.settingsViewModel.settings.plugins.bedready;
                 var currentCropValues = [
@@ -317,7 +320,7 @@ $(function () {
                     bedreadySettings.crop_x4(0);
                     bedreadySettings.crop_y4(self.imageHeight);
                 }
-                
+
                 self.drawCanvas();
             }).fail(function(jqXHR, status, error) {
                 // Handle failure to retrieve image dimensions gracefully
@@ -331,16 +334,16 @@ $(function () {
                 }
             });
         };
-        
+
         self.getCorners = function() {
             return [
-                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0, 
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x1()) || 0,
                  y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y1()) || 0},
-                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || 0, 
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x2()) || 0,
                  y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y2()) || 0},
-                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3()) || 0, 
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x3()) || 0,
                  y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y3()) || 0},
-                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4()) || 0, 
+                {x: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_x4()) || 0,
                  y: parseInt(self.settingsViewModel.settings.plugins.bedready.crop_y4()) || 0}
             ];
         };
@@ -402,30 +405,30 @@ $(function () {
                 return Math.atan2(a.y - centroid.y, a.x - centroid.x) - Math.atan2(b.y - centroid.y, b.x - centroid.x);
             });
         };
-        
+
         self.drawCanvas = function() {
             if (!self.canvas || !self.img || !self.ctx) return;
-            
+
             // Ensure image dimensions are loaded and valid
             if (self.imageWidth <= 0 || self.imageHeight <= 0) return;
-            
+
             // Set canvas size to fit container (max 800px wide)
             const maxWidth = 800;
             self.scale = Math.min(1, maxWidth / self.imageWidth);
             self.canvas.width = self.imageWidth * self.scale;
             self.canvas.height = self.imageHeight * self.scale;
-            
+
             // Draw image
             self.ctx.drawImage(self.img, 0, 0, self.canvas.width, self.canvas.height);
-            
+
             // Get corners in scaled coordinates
             const corners = self.getCorners();
             const scaledCorners = corners.map(c => ({x: c.x * self.scale, y: c.y * self.scale}));
-            
+
             // Draw dimmed overlay outside the quadrilateral
             self.ctx.save();
             self.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            
+
             // Create clipping path for the area outside the quadrilateral
             self.ctx.beginPath();
             self.ctx.rect(0, 0, self.canvas.width, self.canvas.height);
@@ -436,7 +439,7 @@ $(function () {
             self.ctx.closePath();
             self.ctx.fill('evenodd');
             self.ctx.restore();
-            
+
             // Draw quadrilateral border
             self.ctx.strokeStyle = '#00ff00';
             self.ctx.lineWidth = 2;
@@ -447,17 +450,17 @@ $(function () {
             }
             self.ctx.closePath();
             self.ctx.stroke();
-            
+
             // Draw corner handles
             self.ctx.fillStyle = '#00ff00';
             scaledCorners.forEach((corner, idx) => {
                 self.ctx.fillRect(
-                    corner.x - self.handleSize/2, 
-                    corner.y - self.handleSize/2, 
-                    self.handleSize, 
+                    corner.x - self.handleSize/2,
+                    corner.y - self.handleSize/2,
+                    self.handleSize,
                     self.handleSize
                 );
-                
+
                 // Draw corner number
                 self.ctx.fillStyle = '#fff';
                 self.ctx.font = '12px Arial';
@@ -465,11 +468,11 @@ $(function () {
                 self.ctx.fillStyle = '#00ff00';
             });
         };
-        
+
         self.findCornerAtPosition = function(x, y) {
             const corners = self.getCorners();
             const threshold = self.handleSize * 2; // Larger threshold for easier selection
-            
+
             for (let i = 0; i < corners.length; i++) {
                 // Convert corner position to canvas coordinates
                 const cornerX = corners[i].x * self.scale;
@@ -483,17 +486,17 @@ $(function () {
             }
             return null;
         };
-        
+
         self.startCrop = function(data, event) {
             if (!self.canvas) return true;
-            
+
             const rect = self.canvas.getBoundingClientRect();
             // Account for any scaling of the canvas element itself
             const scaleX = self.canvas.width / rect.width;
             const scaleY = self.canvas.height / rect.height;
             const canvasX = (event.clientX - rect.left) * scaleX;
             const canvasY = (event.clientY - rect.top) * scaleY;
-            
+
             self.draggedCorner = self.findCornerAtPosition(canvasX, canvasY);
             if (self.draggedCorner !== null) {
                 self.isDragging = true;
@@ -502,28 +505,28 @@ $(function () {
             }
             return true;
         };
-        
+
         self.moveCrop = function(data, event) {
             if (!self.canvas) return true;
-            
+
             const rect = self.canvas.getBoundingClientRect();
             // Account for any scaling of the canvas element itself
             const scaleX = self.canvas.width / rect.width;
             const scaleY = self.canvas.height / rect.height;
             const canvasX = (event.clientX - rect.left) * scaleX;
             const canvasY = (event.clientY - rect.top) * scaleY;
-            
+
             if (!self.isDragging || self.draggedCorner === null) {
                 // Update cursor style based on hover
                 const hoveredCorner = self.findCornerAtPosition(canvasX, canvasY);
                 self.canvas.style.cursor = hoveredCorner !== null ? 'move' : 'crosshair';
                 return true;
             }
-            
+
             // Convert canvas coordinates to image coordinates
             const imageX = canvasX / self.scale;
             const imageY = canvasY / self.scale;
-            
+
             // Clamp to image boundaries
             const x = Math.max(0, Math.min(self.imageWidth, Math.round(imageX)));
             const y = Math.max(0, Math.min(self.imageHeight, Math.round(imageY)));
@@ -547,12 +550,12 @@ $(function () {
             });
             self.draggedCorner = closestIdx;
             self.setCorners(normalizedCorners);
-            
+
             self.drawCanvas();
             event.preventDefault();
             return false;
         };
-        
+
         self.endCrop = function(data, event) {
             if (self.isDragging) {
                 self.isDragging = false;
@@ -562,7 +565,7 @@ $(function () {
             }
             return true;
         };
-        
+
         self.cancelCrop = function(data, event) {
             if (self.isDragging) {
                 self.isDragging = false;
@@ -572,7 +575,7 @@ $(function () {
             }
             return true;
         };
-        
+
         self.updateCropFromInputs = function() {
             // Only update if image dimensions are available
             if (!self.imageWidth || !self.imageHeight) {
@@ -604,10 +607,10 @@ $(function () {
                 {x: x4, y: y4}
             ]);
             self.setCorners(normalizedCorners);
-            
+
             self.drawCanvas();
         };
-        
+
         self.resetCrop = function() {
             // Top-left
             self.settingsViewModel.settings.plugins.bedready.crop_x1(0);
@@ -638,27 +641,7 @@ $(function () {
                 crop_y4: self.settingsViewModel.settings.plugins.bedready.crop_y4()
             })
                 .done(function (response) {
-                    const similarity_pct = (parseFloat(response.similarity) * 100).toFixed(2);
-                    const timestamp = new Date().getTime();
-                    // Use unique image urls to prevent issues with browser caching
-                    const reference_url = 'plugin/bedready/images/' + self.normalizeImagePath(response.reference_image) + '?t=' + timestamp;
-                    const test_url = 'plugin/bedready/images/' + response.test_image + '?t=' + timestamp;
-                    self.popup_options.text = `<div class="row-fluid"><p>Match percentage calculated as <span class="label label-info">${similarity_pct}%</span>.</p>Reference:<p><img src="${reference_url}"></img></p>Test:<p><img src="${test_url}"></img></p></div>`;
-                    if (parseFloat(response.similarity) < parseFloat(self.settingsViewModel.settings.plugins.bedready.match_percentage())) {
-                        self.popup_options.type = 'error';
-                    } else {
-                        self.popup_options.type = 'success';
-                    }
-
-                    self.popup_options.title = 'Bed Ready Test';
-                    if (self.popup === undefined) {
-                        self.popup = PNotify.singleButtonNotify(self.popup_options);
-                    } else {
-                        self.popup.update(self.popup_options);
-                        if (self.popup.state === 'closed') {
-                            self.popup.open();
-                        }
-                    }
+                    self.show_similarity(response, 'Bed Ready Test');
                     self.taking_snapshot(false);
                 });
         };
