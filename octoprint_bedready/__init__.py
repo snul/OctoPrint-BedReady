@@ -57,6 +57,9 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
     def get_snapshot_url(self):
         """Return snapshot URL from OctoPrint 1.9+ webcam config with legacy fallback."""
         webcam_settings = self._settings.global_get(["webcam"]) or {}
+        has_webcam_system = isinstance(webcam_settings, dict) and (
+            "webcams" in webcam_settings or "defaultWebcam" in webcam_settings
+        )
 
         if isinstance(webcam_settings, dict):
             webcams = webcam_settings.get("webcams") or {}
@@ -85,10 +88,12 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                     if snapshot_url and str(snapshot_url).startswith("http"):
                         return snapshot_url
 
-        # Backwards compatibility for pre-1.9 webcam settings.
-        legacy_snapshot_url = self._settings.global_get(["webcam", "snapshot"])
-        if legacy_snapshot_url and str(legacy_snapshot_url).startswith("http"):
-            return legacy_snapshot_url
+        # Backwards compatibility for pre-1.9 webcam settings only.
+        # On 1.9+, accessing webcam.snapshot may trigger deprecation warnings.
+        if not has_webcam_system:
+            legacy_snapshot_url = self._settings.global_get(["webcam", "snapshot"])
+            if legacy_snapshot_url and str(legacy_snapshot_url).startswith("http"):
+                return legacy_snapshot_url
 
         return ""
 
