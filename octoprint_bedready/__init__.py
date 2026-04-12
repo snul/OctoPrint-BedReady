@@ -9,6 +9,7 @@ import datetime
 from pathlib import Path
 from octoprint.events import Events
 from octoprint.util.files import sanitize_filename
+from octoprint.webcams import get_snapshot_webcam
 
 TEST_FILENAME = "test.jpg"
 COMPARISON_FILENAME = "comparison.jpg"
@@ -55,42 +56,16 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
             self._plugin_manager.send_plugin_message(self._identifier, {"bed_clear": True})
 
     def get_snapshot_url(self):
-        """Return snapshot URL from OctoPrint 1.9+ webcam config with legacy fallback."""
-        webcam_settings = self._settings.global_get(["webcam"]) or {}
+        """Return snapshot URL from OctoPrint 1.9+ webcam config."""
+        webcam = get_snapshot_webcam()
+        if webcam is None:
+            return ""
+        try:
+            snapshot_url = webcam.config.compat.snapshot
+        except AttributeError as e:
+            return ""
 
-        if isinstance(webcam_settings, dict):
-            webcams = webcam_settings.get("webcams") or {}
-            default_webcam = webcam_settings.get("defaultWebcam")
-
-            if isinstance(webcams, dict) and webcams:
-                ordered_webcams = []
-                if default_webcam and default_webcam in webcams:
-                    ordered_webcams.append(webcams[default_webcam])
-                ordered_webcams.extend(
-                    webcam
-                    for key, webcam in webcams.items()
-                    if key != default_webcam
-                )
-
-                for webcam in ordered_webcams:
-                    if not isinstance(webcam, dict):
-                        continue
-
-                    compat_settings = webcam.get("compat") or {}
-                    snapshot_url = compat_settings.get("snapshot")
-                    if snapshot_url and str(snapshot_url).startswith("http"):
-                        return snapshot_url
-
-                    snapshot_url = webcam.get("snapshot")
-                    if snapshot_url and str(snapshot_url).startswith("http"):
-                        return snapshot_url
-
-        # Backwards compatibility for pre-1.9 webcam settings.
-        legacy_snapshot_url = self._settings.global_get(["webcam", "snapshot"])
-        if legacy_snapshot_url and str(legacy_snapshot_url).startswith("http"):
-            return legacy_snapshot_url
-
-        return ""
+        return snapshot_url
 
     # ~~ SimpleApiPlugin mixin
 
@@ -268,14 +243,6 @@ class BedReadyPlugin(octoprint.plugin.SettingsPlugin,
                 raise ValueError("Can only delete debug images")
             p.unlink()
             return flask.jsonify(self.get_debug_images())
-        elif command == "snapshot_status":
-            snapshot_url = self.get_snapshot_url()
-            return flask.jsonify(
-                {
-                    "valid": bool(snapshot_url),
-                    "source": "webcam_system" if snapshot_url else "none"
-                }
-            )
 
     def take_snapshot(self, filename=None):
         snapshot_url = self.get_snapshot_url()

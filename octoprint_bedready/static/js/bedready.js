@@ -25,6 +25,7 @@ $(function () {
 
         self.settingsViewModel = parameters[0];
         self.controlViewModel = parameters[1];
+        self.timelapseViewModel = parameters[2];
 
         self.get_image_url = function(data) {
             if(typeof(data) === 'undefined') {
@@ -58,18 +59,8 @@ $(function () {
         self.snapshot_status_valid = ko.observable(false);
 
         self.snapshot_valid = ko.pureComputed(function(){
-            return self.snapshot_status_valid();
+            return self.timelapseViewModel.canSnapshot();
         });
-
-        self.refresh_snapshot_status = function() {
-            return OctoPrint.simpleApiCommand('bedready', 'snapshot_status')
-                .done(function(response) {
-                    self.snapshot_status_valid(!!(response && response.valid));
-                })
-                .fail(function() {
-                    self.snapshot_status_valid(false);
-                });
-        };
 
         self.show_similarity = function(data, title) {
             const similarity_pct = (parseFloat(data.similarity) * 100).toFixed(2);
@@ -192,7 +183,6 @@ $(function () {
             });
         }
         self.load_snapshots();
-        self.refresh_snapshot_status();
 
         // Debug images functions
         self.load_debug_images = function() {
@@ -246,7 +236,6 @@ $(function () {
 
         // Load debug images when settings are shown
         self.onSettingsShown = function() {
-            self.refresh_snapshot_status();
             self.load_debug_images();
         };
 
@@ -649,7 +638,7 @@ $(function () {
 
     OCTOPRINT_VIEWMODELS.push({
         construct: BedreadyViewModel,
-        dependencies: ['settingsViewModel', 'controlViewModel'],
+        dependencies: ['settingsViewModel', 'controlViewModel', 'timelapseViewModel'],
         elements: ['#settings_plugin_bedready']
     });
 });
